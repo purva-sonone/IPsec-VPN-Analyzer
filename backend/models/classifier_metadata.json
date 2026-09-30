@@ -1,0 +1,155 @@
+{
+  "dataset_source": "MIT Lincoln Laboratory VNAT Dataset",
+  "dataset_url": "https://archive.ll.mit.edu/datasets/vnat/VNAT_Feature_Dataframe_release_1.h5",
+  "dataset_file": "VNAT_Feature_Dataframe_release_1.h5",
+  "dataset_size_mb": 8.59,
+  "total_samples": 15093,
+  "train_samples": 12074,
+  "test_samples": 3019,
+  "label_distribution": {
+    "CHAT": 10498,
+    "STREAMING": 1826,
+    "C2": 1675,
+    "FILE_TRANSFER": 851,
+    "VOIP": 243
+  },
+  "classifier_task": "Traffic Category Classification (5-class)",
+  "classes": [
+    "C2",
+    "CHAT",
+    "FILE_TRANSFER",
+    "STREAMING",
+    "VOIP"
+  ],
+  "label_note": "Labels represent application traffic categories from VNAT dataset. VPN/non-VPN binary distinction is NOT available in this feature file; it requires the 32GB PCAP archive. This classifier predicts traffic category (C2, CHAT, FILE_TRANSFER, STREAMING, VOIP), which is useful for identifying anomalous traffic types inside IPsec VPN tunnels.",
+  "feature_names": [
+    "out_iat_min",
+    "out_iat_max",
+    "out_iat_mean",
+    "out_iat_std_dev",
+    "in_iat_min",
+    "in_iat_max",
+    "in_iat_mean",
+    "in_iat_std_dev",
+    "flow_iat_min",
+    "flow_iat_max",
+    "flow_iat_mean",
+    "flow_iat_std_dev",
+    "log_bytes_per_sec",
+    "log_total_outgoing_packets",
+    "log_total_incoming_packets",
+    "log_total_outgoing_bytes",
+    "log_total_incoming_bytes"
+  ],
+  "n_features": 17,
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 500,
+  "max_features": "sqrt",
+  "class_weight": "balanced_subsample",
+  "oob_score": 0.988,
+  "random_seed": 42,
+  "test_size": 0.2,
+  "accuracy": 0.9874,
+  "classification_report": {
+    "C2": {
+      "precision": 0.9819819819819819,
+      "recall": 0.9761194029850746,
+      "f1-score": 0.9790419161676647,
+      "support": 335.0
+    },
+    "CHAT": {
+      "precision": 0.9961904761904762,
+      "recall": 0.9961904761904762,
+      "f1-score": 0.9961904761904762,
+      "support": 2100.0
+    },
+    "FILE_TRANSFER": {
+      "precision": 0.975609756097561,
+      "recall": 0.9411764705882353,
+      "f1-score": 0.9580838323353293,
+      "support": 170.0
+    },
+    "STREAMING": {
+      "precision": 0.946524064171123,
+      "recall": 0.9698630136986301,
+      "f1-score": 0.9580514208389715,
+      "support": 365.0
+    },
+    "VOIP": {
+      "precision": 1.0,
+      "recall": 0.9795918367346939,
+      "f1-score": 0.9896907216494846,
+      "support": 49.0
+    },
+    "accuracy": 0.9874130506790328,
+    "macro avg": {
+      "precision": 0.9800612556882283,
+      "recall": 0.9725882400394219,
+      "f1-score": 0.9762116734363853,
+      "support": 3019.0
+    },
+    "weighted avg": {
+      "precision": 0.9875120589344185,
+      "recall": 0.9874130506790328,
+      "f1-score": 0.9874252757138864,
+      "support": 3019.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      327,
+      3,
+      0,
+      5,
+      0
+    ],
+    [
+      1,
+      2092,
+      2,
+      5,
+      0
+    ],
+    [
+      1,
+      0,
+      160,
+      9,
+      0
+    ],
+    [
+      4,
+      5,
+      2,
+      354,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      48
+    ]
+  ],
+  "feature_importances": {
+    "flow_iat_mean": 0.104215,
+    "out_iat_max": 0.100067,
+    "flow_iat_min": 0.091296,
+    "out_iat_mean": 0.082321,
+    "out_iat_min": 0.080918,
+    "log_bytes_per_sec": 0.075534,
+    "in_iat_min": 0.069316,
+    "flow_iat_max": 0.065256,
+    "flow_iat_std_dev": 0.052073,
+    "in_iat_max": 0.05045,
+    "in_iat_mean": 0.043649,
+    "log_total_outgoing_bytes": 0.036755,
+    "log_total_outgoing_packets": 0.033562,
+    "out_iat_std_dev": 0.032974,
+    "log_total_incoming_bytes": 0.029888,
+    "log_total_incoming_packets": 0.029114,
+    "in_iat_std_dev": 0.022612
+  },
+  "training_date": "2026-09-28T11:44:12.262568"
+}

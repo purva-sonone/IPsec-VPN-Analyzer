@@ -1,0 +1,118 @@
+{
+  "id": "b17214d8-d3bf-4a5e-bcaf-e8796d675868",
+  "filename": "e34beccc-229b-41e8-b7bf-29720fcc1109.pcapng",
+  "status": "completed",
+  "pcap_metrics": {
+    "packet_count": 54,
+    "protocols_found": [
+      "IKE",
+      "ESP"
+    ],
+    "vpn_mode_inferred": "Tunnel (Inferred \u2014 ESP detected as outer layer)",
+    "ike_version": "IKEv2",
+    "encryption": "AES-GCM-16",
+    "authentication": "Not Extracted",
+    "key_exchange": "Group 19 (ECP-256)",
+    "flow_features": {
+      "out_iat_min": 0.0166933536529541,
+      "out_iat_max": 5.974254131317139,
+      "out_iat_mean": 1.1599475603837233,
+      "out_iat_std_dev": 1.514893420049158,
+      "in_iat_min": 6.127357482910156e-05,
+      "in_iat_max": 5.964219808578491,
+      "in_iat_mean": 1.1597780080942006,
+      "in_iat_std_dev": 1.5135623817717319,
+      "flow_iat_min": 6.127357482910156e-05,
+      "flow_iat_max": 5.974254131317139,
+      "flow_iat_mean": 1.159862784238962,
+      "flow_iat_std_dev": 1.514228049534934,
+      "log_bytes_per_sec": 6.28898026823443,
+      "log_total_outgoing_packets": 3.295836866004329,
+      "log_total_incoming_packets": 3.295836866004329,
+      "log_total_outgoing_bytes": 9.00380808646717,
+      "log_total_incoming_bytes": 9.001715906761175,
+      "flow_duration_seconds": 30.1725,
+      "total_packets": 54,
+      "total_bytes": 16251
+    }
+  },
+  "security_assessment": {
+    "findings": [
+      {
+        "title": "IKEv2 Detected",
+        "description": "IKEv2 is the current recommended standard for IKE key exchange.",
+        "severity": "Informational",
+        "recommendation": "No action required. Ensure IKEv2 features like MOBIKE are enabled if applicable.",
+        "evidence": "Observed exchange type indicates IKEv2.",
+        "risk_contribution": 0
+      },
+      {
+        "title": "Strong Encryption Algorithm",
+        "description": "The observed encryption algorithm 'AES-GCM-16' meets modern cryptographic standards.",
+        "severity": "Informational",
+        "recommendation": "No action required. Prefer AES-GCM variants for authenticated encryption.",
+        "evidence": "Observed in IKE SA proposal: AES-GCM-16",
+        "risk_contribution": 0
+      },
+      {
+        "title": "Adequate Diffie-Hellman Group",
+        "description": "The DH group 'Group 19 (ECP-256)' provides an adequate security margin.",
+        "severity": "Informational",
+        "recommendation": "Consider ECP groups (19, 20, 21) for elliptic-curve based key exchange.",
+        "evidence": "Observed in IKE Key Exchange payload: Group 19 (ECP-256)",
+        "risk_contribution": 0
+      }
+    ],
+    "overall_risk_score": 0,
+    "risk_level": "Informational",
+    "score_explanation": "Score 0: No risk-contributing parameters were found among the 3 rule(s) that ran. 1 rule(s) were skipped because those parameters were not extractable from this capture. A score of 0 does NOT guarantee the VPN is fully secure \u2014 it means no high-risk values were observed in the available data.",
+    "rules_evaluated": [
+      {
+        "rule": "IKE Version Check",
+        "observed_value": "IKEv2",
+        "reason": null
+      },
+      {
+        "rule": "Encryption Algorithm Strength",
+        "observed_value": "AES-GCM-16",
+        "reason": null
+      },
+      {
+        "rule": "Diffie-Hellman Group Strength",
+        "observed_value": "Group 19 (ECP-256)",
+        "reason": null
+      }
+    ],
+    "rules_skipped": [
+      {
+        "rule": "Authentication Method",
+        "observed_value": null,
+        "reason": "Authentication method not extractable. The IKE_AUTH payload is only present if the authentication exchange is captured and the auth method field is exposed by TShark."
+      }
+    ]
+  },
+  "ml_prediction": {
+    "predicted_category": "CHAT",
+    "confidence_score": 0.53,
+    "model_status": "trained_model",
+    "model_note": "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). Predicted category: CHAT with 53.0% confidence. Note: This predicts traffic TYPE (C2/Chat/Streaming/etc.), not VPN vs non-VPN. VPN/non-VPN binary detection requires the 32 GB PCAP archive not downloaded here.",
+    "features_available": [
+      "Protocol list: IKE, ESP",
+      "Packet count: 54",
+      "IKE version: IKEv2",
+      "Flow duration: 30.172s",
+      "Total bytes: 16,251",
+      "Flow IAT mean: 1.1599s",
+      "Bytes/sec (log): 6.29"
+    ],
+    "features_required_missing": [],
+    "all_class_probabilities": {
+      "C2": 0.14,
+      "CHAT": 0.53,
+      "FILE_TRANSFER": 0.075,
+      "STREAMING": 0.23,
+      "VOIP": 0.025
+    },
+    "dataset_note": "Model: RandomForestClassifier (200 trees), trained on VNAT Feature Dataframe (15,093 samples), test accuracy 98.48%."
+  }
+}

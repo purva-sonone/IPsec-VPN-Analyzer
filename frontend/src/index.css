@@ -1,0 +1,491 @@
+/* ============================================================
+   src/index.css — Enterprise Light Theme Design System
+   IPsec VPN Security Analyzer
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+@import "tailwindcss";
+
+/* ── CSS Custom Properties (Design Tokens) ─────────────────── */
+:root {
+  /* Page surfaces */
+  --bg-page:        #F5F7FA;
+  --bg-card:        #FFFFFF;
+  --bg-surface:     #F8FAFC;
+  --bg-muted:       #F1F5F9;
+
+  /* Borders */
+  --border:         #E2E8F0;
+  --border-muted:   #EEF2F7;
+
+  /* Typography */
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+  --text-faint:     #CBD5E1;
+
+  /* Blue — Primary / Actions / Navigation */
+  --blue:           #2563EB;
+  --blue-hover:     #1D4ED8;
+  --blue-light:     #EFF6FF;
+  --blue-border:    #BFDBFE;
+  --blue-text:      #1D4ED8;
+
+  /* Green — Success / Pass / Informational */
+  --green:          #16A34A;
+  --green-light:    #F0FDF4;
+  --green-border:   #BBF7D0;
+  --green-text:     #15803D;
+
+  /* Amber — Warning / Medium risk */
+  --amber:          #D97706;
+  --amber-light:    #FFFBEB;
+  --amber-border:   #FDE68A;
+  --amber-text:     #B45309;
+
+  /* Red — High / Critical risk */
+  --red:            #DC2626;
+  --red-light:      #FEF2F2;
+  --red-border:     #FECACA;
+  --red-text:       #B91C1C;
+
+  /* Purple — ML / Classification only */
+  --purple:         #7C3AED;
+  --purple-light:   #F5F3FF;
+  --purple-border:  #DDD6FE;
+  --purple-text:    #6D28D9;
+
+  /* Radius */
+  --radius-sm:      6px;
+  --radius:         10px;
+  --radius-lg:      14px;
+  --radius-xl:      18px;
+
+  /* Shadow */
+  --shadow-card:    0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md:      0 4px 6px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-focus:   0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ── Base Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: var(--bg-muted); }
+::-webkit-scrollbar-thumb  { background: #CBD5E1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ── Card Components ────────────────────────────────────────── */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.card-padded {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+.card-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+}
+
+/* ── Stat Card ──────────────────────────────────────────────── */
+.stat-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  background-color: var(--blue);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 150ms, box-shadow 150ms;
+  text-decoration: none;
+}
+.btn-primary:hover:not(:disabled) { background-color: var(--blue-hover); }
+.btn-primary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms;
+  text-decoration: none;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-surface);
+  border-color: #CBD5E1;
+  color: var(--text-primary);
+}
+.btn-secondary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--red-light);
+  border: 1px solid var(--red-border);
+  color: var(--red-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+.btn-danger:hover { background-color: #FECACA; }
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Risk badges */
+.badge-high {
+  background-color: var(--red-light);
+  color: var(--red-text);
+  border-color: var(--red-border);
+}
+.badge-medium {
+  background-color: var(--amber-light);
+  color: var(--amber-text);
+  border-color: var(--amber-border);
+}
+.badge-low {
+  background-color: var(--blue-light);
+  color: var(--blue-text);
+  border-color: var(--blue-border);
+}
+.badge-info {
+  background-color: var(--green-light);
+  color: var(--green-text);
+  border-color: var(--green-border);
+}
+.badge-neutral {
+  background-color: var(--bg-muted);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+/* IKE version badges */
+.badge-ikev2 {
+  background-color: var(--blue-light);
+  color: var(--blue-text);
+  border-color: var(--blue-border);
+}
+.badge-ikev1 {
+  background-color: var(--amber-light);
+  color: var(--amber-text);
+  border-color: var(--amber-border);
+}
+
+/* ML badges */
+.badge-ml {
+  background-color: var(--purple-light);
+  color: var(--purple-text);
+  border-color: var(--purple-border);
+}
+
+/* ── Status Dots ─────────────────────────────────────────────── */
+.status-dot-ok {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--green);
+  flex-shrink: 0;
+}
+.status-dot-warn {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--amber);
+  flex-shrink: 0;
+}
+.status-dot-error {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--red);
+  flex-shrink: 0;
+}
+.status-dot-idle {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: #CBD5E1;
+  flex-shrink: 0;
+}
+
+/* ── Tables ─────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+}
+.data-table thead tr {
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-surface);
+}
+.data-table thead th {
+  text-align: left;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+.data-table thead th.sortable { cursor: pointer; }
+.data-table thead th.sortable:hover { color: var(--text-secondary); }
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border-muted);
+  transition: background-color 120ms;
+}
+.data-table tbody tr:hover { background-color: #F8FAFC; }
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table tbody td {
+  padding: 0.75rem 1.25rem;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+.data-table tbody td.td-primary {
+  font-weight: 500;
+  color: var(--text-primary);
+  max-width: 180px;
+}
+.data-table tbody td.td-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+}
+
+/* ── Form controls ──────────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: border-color 150ms, box-shadow 150ms;
+  outline: none;
+}
+.input-field::placeholder { color: var(--text-muted); }
+.input-field:focus {
+  border-color: var(--blue);
+  box-shadow: var(--shadow-focus);
+}
+
+.select-field {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 150ms;
+  outline: none;
+}
+.select-field:focus { border-color: var(--blue); box-shadow: var(--shadow-focus); }
+
+/* ── Section Heading ────────────────────────────────────────── */
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+/* ── Card header divider ────────────────────────────────────── */
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.card-header-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Alert banners ──────────────────────────────────────────── */
+.alert-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--amber-light);
+  border: 1px solid var(--amber-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+.alert-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--red-light);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+.alert-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--blue-light);
+  border: 1px solid var(--blue-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+
+/* ── Distribution bar legend ────────────────────────────────── */
+.dist-bar-track {
+  display: flex;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: var(--bg-muted);
+}
+
+/* ── Sidebar nav ─────────────────────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background-color 120ms, color 120ms;
+}
+.nav-item:hover {
+  background-color: var(--bg-muted);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background-color: var(--blue-light);
+  color: var(--blue-text);
+  font-weight: 600;
+}
+
+/* ── Crypto strength tags ───────────────────────────────────── */
+.strength-strong {
+  background-color: var(--green-light);
+  color: var(--green-text);
+  border-color: var(--green-border);
+}
+.strength-weak {
+  background-color: var(--red-light);
+  color: var(--red-text);
+  border-color: var(--red-border);
+}
+.strength-observed {
+  background-color: var(--blue-light);
+  color: var(--blue-text);
+  border-color: var(--blue-border);
+}
+
+/* ── Ping animation for status dots ────────────────────────── */
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+/* ── Upload drop zone ───────────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-xl);
+  background-color: var(--bg-card);
+  transition: border-color 200ms, background-color 200ms;
+  cursor: pointer;
+}
+.drop-zone:hover, .drop-zone.dragging {
+  border-color: var(--blue);
+  background-color: var(--blue-light);
+}
+
+/* ── Page wrapper ───────────────────────────────────────────── */
+.page-content {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding-bottom: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}

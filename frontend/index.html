@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IPsec VPN Security Analyzer</title>
+    <meta name="description" content="AI-Powered IPsec VPN Protocol Analyzer — security analysis, cryptographic parameter inspection and ML traffic classification." />
+    <style>
+      /* Prevent FOUC — match page bg before CSS loads */
+      body { background-color: #F5F7FA; margin: 0; }
+      /* Spin animation used by loading states */
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      /* Ping animation for status dots */
+      @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+pyshark
+scikit-learn
+pandas
+numpy
+reportlab
+pydantic
+joblib
+pymongo
+dnspython

@@ -1,0 +1,114 @@
+{
+  "id": "bc5ecc21-9bc8-45cf-8c09-990121128d38",
+  "filename": "f0250d43-b4e7-46cb-b222-70e5f13cbba0.pcap",
+  "status": "completed",
+  "pcap_metrics": {
+    "packet_count": 10,
+    "protocols_found": [
+      "IKE"
+    ],
+    "vpn_mode_inferred": "Unknown",
+    "ike_version": "IKEv1",
+    "encryption": "3DES-CBC",
+    "authentication": "RSA Signatures",
+    "key_exchange": "Alternate 1024-bit MODP group",
+    "flow_features": {
+      "out_iat_min": 0.07996702194213867,
+      "out_iat_max": 10.000854969024658,
+      "out_iat_mean": 2.9263514041900636,
+      "out_iat_std_dev": 3.796003736380536,
+      "in_iat_min": 0.09729909896850586,
+      "in_iat_max": 10.135857105255127,
+      "in_iat_mean": 4.673739671707153,
+      "in_iat_std_dev": 4.145799427350139,
+      "flow_iat_min": 0.07996702194213867,
+      "flow_iat_max": 10.135857105255127,
+      "flow_iat_mean": 3.581622004508972,
+      "flow_iat_std_dev": 4.020824562570404,
+      "log_bytes_per_sec": 5.987749486275415,
+      "log_total_outgoing_packets": 1.791759469228055,
+      "log_total_incoming_packets": 1.3862943611198906,
+      "log_total_outgoing_bytes": 7.977968093128549,
+      "log_total_incoming_bytes": 7.977625098784593,
+      "flow_duration_seconds": 14.6318,
+      "total_packets": 10,
+      "total_bytes": 5831
+    }
+  },
+  "security_assessment": {
+    "findings": [
+      {
+        "title": "IKEv1 Detected",
+        "description": "IKEv1 is considered legacy and has known vulnerabilities including susceptibility to aggressive-mode dictionary attacks and weaker PFS guarantees.",
+        "severity": "Medium",
+        "recommendation": "Migrate to IKEv2, which provides stronger security guarantees and mandatory EAP support.",
+        "evidence": "Observed exchange type indicates IKEv1.",
+        "risk_contribution": 2
+      },
+      {
+        "title": "Weak or Deprecated Encryption Algorithm",
+        "description": "The observed encryption algorithm '3DES-CBC' is considered weak or deprecated and does not meet modern cryptographic standards.",
+        "severity": "High",
+        "recommendation": "Upgrade to AES-GCM-256 or AES-GCM-128 (AEAD ciphers preferred).",
+        "evidence": "Observed in IKE SA proposal: 3DES-CBC",
+        "risk_contribution": 3
+      },
+      {
+        "title": "Weak Diffie-Hellman Group",
+        "description": "The DH group 'Alternate 1024-bit MODP group' provides an insufficient security margin against modern attacks (e.g., Logjam). Groups 1, 2, and 5 are deprecated.",
+        "severity": "High",
+        "recommendation": "Use DH Group 14 (2048-bit MODP) as minimum, or ECP groups 19/20/21.",
+        "evidence": "Observed in IKE Key Exchange payload: Alternate 1024-bit MODP group",
+        "risk_contribution": 3
+      },
+      {
+        "title": "Certificate/Signature-Based Authentication",
+        "description": "The observed authentication method 'RSA Signatures' uses asymmetric cryptography.",
+        "severity": "Informational",
+        "recommendation": "Ensure certificate chain validity and key lengths meet your policy.",
+        "evidence": "Observed authentication method: RSA Signatures",
+        "risk_contribution": 0
+      }
+    ],
+    "overall_risk_score": 8,
+    "risk_level": "High",
+    "score_explanation": "Score 8 \u2014 Risk contributions: IKEv1 Detected (contributed +2); Weak or Deprecated Encryption Algorithm (contributed +3); Weak Diffie-Hellman Group (contributed +3).",
+    "rules_evaluated": [
+      {
+        "rule": "IKE Version Check",
+        "observed_value": "IKEv1",
+        "reason": null
+      },
+      {
+        "rule": "Encryption Algorithm Strength",
+        "observed_value": "3DES-CBC",
+        "reason": null
+      },
+      {
+        "rule": "Diffie-Hellman Group Strength",
+        "observed_value": "Alternate 1024-bit MODP group",
+        "reason": null
+      },
+      {
+        "rule": "Authentication Method",
+        "observed_value": "RSA Signatures",
+        "reason": null
+      }
+    ],
+    "rules_skipped": []
+  },
+  "ml_prediction": {
+    "predicted_category": "Not Applicable",
+    "confidence_score": null,
+    "model_status": "not_applicable",
+    "model_note": "Traffic classification applies to ESP-encrypted data flows. No ESP packets were detected in this capture \u2014 only IKE negotiation traffic is present. Category classification is not meaningful without an encrypted data payload.",
+    "features_available": [
+      "Protocol list: IKE",
+      "Packet count: 10",
+      "IKE version: IKEv1"
+    ],
+    "features_required_missing": [],
+    "all_class_probabilities": null,
+    "dataset_note": "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). Predicts traffic category: C2, CHAT, FILE_TRANSFER, STREAMING, VOIP."
+  }
+}
