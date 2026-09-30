@@ -6,11 +6,16 @@ Uses pymongo to connect to MongoDB Atlas.
 
 import pymongo
 import logging
+import os
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-MONGO_URI = "mongodb+srv://purvasonone01:purva123@purva.8bjhhdr.mongodb.net/?appName=purva"
+# Load MongoDB URI from environment variable (set in Render dashboard)
+MONGO_URI = os.environ.get(
+    "MONGO_URI",
+    "mongodb+srv://purvasonone01:purva123@purva.8bjhhdr.mongodb.net/?appName=purva"
+)
 
 client = None
 db = None

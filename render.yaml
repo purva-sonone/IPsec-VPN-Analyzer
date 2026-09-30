@@ -1,0 +1,28 @@
+services:
+  # ── Backend: FastAPI + TShark (Docker) ────────────────────────────────────
+  - type: web
+    name: ipsec-vpn-analyzer-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PYTHON_ENV
+        value: production
+    healthCheckPath: /
+
+  # ── Frontend: React Static Site ────────────────────────────────────────────
+  - type: web
+    name: ipsec-vpn-analyzer-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    plan: free
+    envVars:
+      - key: VITE_API_URL
+        # ⚠️  Render par backend deploy hone ke baad yahan backend ka URL daalo
+        # Example: https://ipsec-vpn-analyzer-backend.onrender.com
+        value: https://ipsec-vpn-analyzer-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
