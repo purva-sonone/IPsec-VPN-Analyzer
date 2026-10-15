@@ -18,7 +18,7 @@ services:
     name: ipsec-vpn-analyzer-frontend
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
-    publishDir: ./frontend/dist
+    staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
         value: https://ipsec-vpn-analyzer-backend.onrender.com
