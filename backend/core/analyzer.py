@@ -200,7 +200,17 @@ _DH_GROUPS = {
 _IKEv2_EXCHANGE_TYPES = {34, 35, 36, 37}
 # IKEv1 exchange types: ID_PROT=2, AGGRESSIVE=4, INFO=5, QUICK_MODE=6
 _IKEv1_EXCHANGE_TYPES = {2, 4, 5, 6, 32}
-
+_IKE_EXCHANGE_NAMES = {
+    2: "Identity Protection (Main Mode)",
+    4: "Aggressive Mode",
+    5: "Informational (v1)",
+    6: "Quick Mode",
+    32: "New Group Mode",
+    34: "IKE_SA_INIT",
+    35: "IKE_AUTH",
+    36: "CREATE_CHILD_SA",
+    37: "INFORMATIONAL (v2)",
+}
 
 def _safe_get(layer, *field_names: str, reject_zero: bool = True):
     """
@@ -417,6 +427,15 @@ def _run_pyshark_sync(file_path: str) -> dict:
         # Flow-level features for ML classification
         # These are populated during packet iteration and finalised after the loop
         "flow_features": None,
+        # Packet-level forensics table records
+        "packets": [],
+        # Packet-size distribution histogram and metrics
+        "packet_size_distribution": [],
+        "packet_size_stats": {
+            "min_size": 0,
+            "max_size": 0,
+            "avg_size": 0,
+        },
     }
 
     # Accumulators for flow-level feature extraction
@@ -503,6 +522,76 @@ def _run_pyshark_sync(file_path: str) -> dict:
                 # Parse transform attributes (keep trying until all fields found)
                 _parse_transform_attrs(isakmp, results)
 
+            # ── Packet Forensic Extraction (store up to 150 packets) ────────
+            if len(results["packets"]) < 150:
+                try:
+                    ip_layer = getattr(pkt, 'ip', None) or getattr(pkt, 'ipv6', None)
+                    src_ip = _safe_get(ip_layer, 'src') or '—'
+                    dst_ip = _safe_get(ip_layer, 'dst') or '—'
+
+                    if 'ESP' in pkt or hasattr(pkt, 'esp'):
+                        proto_name = "ESP"
+                    elif 'ISAKMP' in pkt or hasattr(pkt, 'isakmp'):
+                        proto_name = "IKE"
+                    elif hasattr(pkt, 'tcp'):
+                        proto_name = "TCP"
+                    elif hasattr(pkt, 'udp'):
+                        proto_name = "UDP"
+                    elif hasattr(pkt, 'icmp'):
+                        proto_name = "ICMP"
+                    else:
+                        proto_name = getattr(pkt, 'highest_layer', 'UNKNOWN').upper()
+
+                    src_port = None
+                    dst_port = None
+                    if hasattr(pkt, 'udp'):
+                        src_port = _safe_get(pkt.udp, 'srcport')
+                        dst_port = _safe_get(pkt.udp, 'dstport')
+                    elif hasattr(pkt, 'tcp'):
+                        src_port = _safe_get(pkt.tcp, 'srcport')
+                        dst_port = _safe_get(pkt.tcp, 'dstport')
+
+                    details = {
+                        "src_port": src_port,
+                        "dst_port": dst_port,
+                        "layers": [l.layer_name.upper() for l in pkt.layers],
+                    }
+
+                    if proto_name == "ESP" and hasattr(pkt, 'esp'):
+                        spi = _safe_get(pkt.esp, 'spi')
+                        seq = _safe_get(pkt.esp, 'sequence')
+                        details["esp_spi"] = str(spi) if spi else None
+                        details["esp_seq"] = str(seq) if seq else None
+                        info_str = f"ESP (SPI: {spi or '—'}, Seq: {seq or '—'})"
+                    elif proto_name in ("IKE", "ISAKMP") and hasattr(pkt, 'isakmp'):
+                        et = _safe_get(pkt.isakmp, 'exchangetype', reject_zero=False)
+                        et_int = int(et) if et and et.isdigit() else None
+                        et_name = _IKE_EXCHANGE_NAMES.get(et_int, f"Type {et}" if et else "Negotiation")
+                        msg_id = _safe_get(pkt.isakmp, 'messageid', reject_zero=False)
+                        details["ike_exchange"] = et_name
+                        details["ike_msg_id"] = str(msg_id) if msg_id else None
+                        info_str = f"IKE: {et_name} (MsgID: {msg_id or '0'})"
+                    elif src_port and dst_port:
+                        info_str = f"{proto_name} Port {src_port} → {dst_port}"
+                    else:
+                        info_str = f"{proto_name} ({pkt_len} bytes)"
+
+                    first_ts = _pkt_timestamps[0] if _pkt_timestamps else (pkt_ts or 0)
+                    rel_time = f"+{(pkt_ts - first_ts):.4f}s" if (pkt_ts is not None and first_ts is not None) else f"pkt #{results['packet_count']}"
+
+                    results["packets"].append({
+                        "number": results["packet_count"],
+                        "timestamp": rel_time,
+                        "src_ip": src_ip,
+                        "dst_ip": dst_ip,
+                        "protocol": proto_name,
+                        "length": pkt_len,
+                        "info": info_str,
+                        "details": details,
+                    })
+                except Exception as p_err:
+                    logger.debug("Failed to extract forensic packet data: %s", p_err)
+
         cap.close()
         loop.close()
 
@@ -557,6 +646,31 @@ def _run_pyshark_sync(file_path: str) -> dict:
             "total_packets": results["packet_count"],
             "total_bytes": total_bytes,
         }
+
+        # ── Compute packet-size distribution ──────────────────────────────
+        if _pkt_sizes:
+            results["packet_size_stats"] = {
+                "min_size": min(_pkt_sizes),
+                "max_size": max(_pkt_sizes),
+                "avg_size": round(sum(_pkt_sizes) / len(_pkt_sizes), 1),
+            }
+            bin_defs = [
+                ("0-127 B", 0, 127),
+                ("128-255 B", 128, 255),
+                ("256-511 B", 256, 511),
+                ("512-1023 B", 512, 1023),
+                ("1024-1500 B", 1024, 1500),
+                ("> 1500 B", 1501, float('inf')),
+            ]
+            total_pkts = len(_pkt_sizes)
+            results["packet_size_distribution"] = [
+                {
+                    "bin": label,
+                    "count": sum(1 for s in _pkt_sizes if low <= s <= high),
+                    "percentage": round((sum(1 for s in _pkt_sizes if low <= s <= high) / total_pkts) * 100, 1)
+                }
+                for label, low, high in bin_defs
+            ]
 
         # ── TShark subprocess fallback ────────────────────────────────────
         # If PyShark did not extract any crypto parameters, try TShark -T fields

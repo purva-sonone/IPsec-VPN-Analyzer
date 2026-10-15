@@ -11,6 +11,9 @@ class PcapMetrics(BaseModel):
     authentication: str
     key_exchange: str
     flow_features: Optional[dict] = None
+    packet_size_distribution: Optional[List[dict]] = None
+    packet_size_stats: Optional[dict] = None
+    packets: Optional[List[dict]] = None
 
 
 class SecurityFinding(BaseModel):

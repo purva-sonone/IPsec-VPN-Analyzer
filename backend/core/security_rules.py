@@ -250,7 +250,48 @@ def evaluate_security(pcap_results: dict) -> dict:
             ),
         })
 
-    # ── 5. Determine overall risk level ──────────────────────────────────────
+    # ── 5. ESP Payload Protection ─────────────────────────────────────────────
+    if "ESP" in protocols:
+        findings.append({
+            "title": "ESP Payload Encryption Active",
+            "description": (
+                "Encapsulating Security Payload (ESP) is actively encrypting network traffic. "
+                "Packet payloads are shielded against passive wiretapping and plaintext inspection."
+            ),
+            "severity": "Informational",
+            "recommendation": "Maintain active rekeying policies (e.g. byte or time-based limits) and verify anti-replay windowing.",
+            "evidence": f"Observed ESP packets in capture; outer mode: {pcap_results.get('vpn_mode_inferred', 'Tunnel')}.",
+            "risk_contribution": 0,
+        })
+        rules_evaluated.append({
+            "rule": "ESP Payload Protection",
+            "observed_value": "ESP Encapsulation Present",
+            "status": "PASS",
+        })
+    elif "IKE" in protocols:
+        findings.append({
+            "title": "Control Channel Only (No Encrypted Data Flow)",
+            "description": (
+                "The capture contains IKE negotiation exchanges but no ESP encrypted data traffic. "
+                "Security of the underlying application data flow could not be verified from this sample."
+            ),
+            "severity": "Informational",
+            "recommendation": "Capture traffic during active tunnel usage to evaluate data-phase payload protection.",
+            "evidence": f"Protocols observed: {', '.join(protocols)}. Zero ESP data packets detected.",
+            "risk_contribution": 0,
+        })
+        rules_evaluated.append({
+            "rule": "ESP Payload Protection",
+            "observed_value": "No ESP Packets Observed",
+            "status": "PASS",
+        })
+    else:
+        rules_skipped.append({
+            "rule": "ESP Payload Protection",
+            "reason": "Neither IKE nor ESP protocols were identified in the analyzed packets.",
+        })
+
+    # ── 6. Determine overall risk level ──────────────────────────────────────
     if risk_score >= 5:
         risk_level = "High"
     elif risk_score >= 3:

@@ -1,20 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Shield, Activity, Lock, Key, Wifi,
   AlertTriangle, CheckCircle, XCircle, Info, Cpu, FlaskConical,
   SkipForward, ListChecks, AlertCircle, Layers, RefreshCw,
+  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { fmtDate, riskColor, sevColor, strengthOf } from '../lib/utils';
 
 // ── Severity icon map ──────────────────────────────────────────────────────
 const SEV_ICON = {
-  Critical:      <XCircle       style={{ width: 14, height: 14, color: '#B91C1C', flexShrink: 0 }} />,
-  High:          <AlertTriangle style={{ width: 14, height: 14, color: '#DC2626', flexShrink: 0 }} />,
-  Medium:        <AlertTriangle style={{ width: 14, height: 14, color: '#D97706', flexShrink: 0 }} />,
-  Low:           <Info          style={{ width: 14, height: 14, color: '#2563EB', flexShrink: 0 }} />,
-  Informational: <CheckCircle   style={{ width: 14, height: 14, color: '#16A34A', flexShrink: 0 }} />,
+  Critical:      <XCircle       style={{ width: 15, height: 15, color: '#B91C1C', flexShrink: 0 }} />,
+  High:          <AlertTriangle style={{ width: 15, height: 15, color: '#DC2626', flexShrink: 0 }} />,
+  Medium:        <AlertTriangle style={{ width: 15, height: 15, color: '#D97706', flexShrink: 0 }} />,
+  Low:           <Info          style={{ width: 15, height: 15, color: '#2563EB', flexShrink: 0 }} />,
+  Informational: <CheckCircle   style={{ width: 15, height: 15, color: '#16A34A', flexShrink: 0 }} />,
 };
 
 // ── MetricCard ─────────────────────────────────────────────────────────────
@@ -51,11 +52,11 @@ function CryptoRow({ label, value }) {
   );
 }
 
-// ── FindingCard ────────────────────────────────────────────────────────────
+// ── Evidence-Based FindingCard ─────────────────────────────────────────────
 function FindingCard({ f }) {
   const sc = sevColor(f.severity);
 
-  // Map severity to border-left color
+  // Map severity to border-left accent
   const accentColor =
     f.severity === 'High' || f.severity === 'Critical' ? '#DC2626' :
     f.severity === 'Medium' ? '#D97706' :
@@ -65,12 +66,14 @@ function FindingCard({ f }) {
     <div style={{
       borderRadius: 10, border: '1px solid #E2E8F0',
       borderLeft: `3px solid ${accentColor}`,
-      backgroundColor: '#FFFFFF', padding: '1rem',
+      backgroundColor: '#FFFFFF', padding: '1.125rem',
+      display: 'flex', flexDirection: 'column', gap: '0.75rem',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      {/* Title & severity badge */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {SEV_ICON[f.severity] || SEV_ICON.Informational}
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{f.title}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{f.title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {f.risk_contribution > 0 && (
@@ -81,21 +84,41 @@ function FindingCard({ f }) {
           <span className={`badge ${sc}`}>{f.severity}</span>
         </div>
       </div>
-      <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.65, marginBottom: 8 }}>{f.description}</p>
-      <div style={{ fontSize: 11, lineHeight: 1.6 }}>
-        {f.evidence && (
-          <p style={{ marginBottom: 3 }}>
-            <span style={{ fontWeight: 600, color: '#94A3B8' }}>Evidence: </span>
-            <span style={{ color: '#475569' }}>{f.evidence}</span>
-          </p>
-        )}
-        {f.recommendation && (
-          <p>
-            <span style={{ fontWeight: 600, color: '#94A3B8' }}>Recommendation: </span>
-            <span style={{ color: '#475569' }}>{f.recommendation}</span>
-          </p>
-        )}
+
+      {/* Short Explanation */}
+      <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+        {f.description}
       </div>
+
+      {/* Actual PCAP Evidence Box */}
+      {f.evidence && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          padding: '0.625rem 0.875rem', borderRadius: 6,
+          backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
+        }}>
+          <FileSearch style={{ width: 14, height: 14, color: '#2563EB', flexShrink: 0, marginTop: 2 }} />
+          <div style={{ fontSize: 11, lineHeight: 1.55 }}>
+            <span style={{ fontWeight: 600, color: '#334155' }}>PCAP Evidence: </span>
+            <span style={{ color: '#0F172A', fontFamily: 'monospace' }}>{f.evidence}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Remediation Recommendation Box */}
+      {f.recommendation && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          padding: '0.625rem 0.875rem', borderRadius: 6,
+          backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0',
+        }}>
+          <Wrench style={{ width: 14, height: 14, color: '#15803D', flexShrink: 0, marginTop: 2 }} />
+          <div style={{ fontSize: 11, lineHeight: 1.55, color: '#166534' }}>
+            <span style={{ fontWeight: 600 }}>Remediation: </span>
+            <span>{f.recommendation}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -107,7 +130,7 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
     <div style={{ marginTop: '1.25rem', borderRadius: 10, border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.625rem 1rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
         <ListChecks style={{ width: 12, height: 12, color: '#94A3B8' }} />
-        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Rule Audit</span>
+        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Rule Audit Trail</span>
       </div>
       <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
         <thead>
@@ -155,31 +178,75 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
   );
 }
 
-// ── ML Section ─────────────────────────────────────────────────────────────
-const ML_COLORS = { C2: '#DC2626', CHAT: '#2563EB', FILE_TRANSFER: '#16A34A', STREAMING: '#D97706', VOIP: '#7C3AED' };
-
-function MLSection({ ml }) {
-  if (!ml) return null;
-  const { model_status, model_note, predicted_category, confidence_score,
-          features_available = [], all_class_probabilities, dataset_note } = ml;
-
-  if (model_status === 'not_applicable') {
+// ── Packet-Size Distribution Chart ─────────────────────────────────────────
+function PacketSizeDistribution({ distribution = [], stats = {} }) {
+  if (!distribution || distribution.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-        <AlertCircle style={{ width: 14, height: 14, color: '#94A3B8', flexShrink: 0, marginTop: 1 }} />
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#64748B', marginBottom: 3 }}>Not Applicable</p>
-          <p style={{ fontSize: 12, color: '#94A3B8', lineHeight: 1.6 }}>{model_note}</p>
-        </div>
+      <div style={{ padding: '1rem', textAlign: 'center', color: '#94A3B8', fontSize: 12, backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+        No packet size data available for this capture.
       </div>
     );
   }
 
-  if (model_status !== 'trained_model') {
-    return <p style={{ fontSize: 13, color: '#64748B' }}>{model_note}</p>;
-  }
+  const maxPct = Math.max(...distribution.map(d => d.percentage || 0), 1);
 
-  const conf     = confidence_score != null ? (confidence_score * 100).toFixed(1) : null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Quick summary badges */}
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Min Size</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{stats?.min_size ?? 0} B</p>
+        </div>
+        <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Average Size</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#2563EB' }}>{stats?.avg_size ?? 0} B</p>
+        </div>
+        <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Max Size</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{stats?.max_size ?? 0} B</p>
+        </div>
+      </div>
+
+      {/* Horizontal Distribution Bars */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+        {distribution.map(d => {
+          const barWidth = d.percentage > 0 ? Math.max((d.percentage / maxPct) * 100, 2) : 0;
+          return (
+            <div key={d.bin} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ fontWeight: 600, color: '#334155' }}>{d.bin}</span>
+                <span style={{ color: '#64748B' }}>
+                  {d.count} pkts ({d.percentage}%)
+                </span>
+              </div>
+              <div style={{
+                height: 8, width: '100%', backgroundColor: '#E2E8F0',
+                borderRadius: 4, overflow: 'hidden', position: 'relative',
+              }}>
+                <div style={{
+                  height: '100%', width: `${barWidth}%`,
+                  backgroundColor: d.percentage > 30 ? '#2563EB' : d.percentage > 10 ? '#3B82F6' : '#93C5FD',
+                  borderRadius: 4, transition: 'width 0.4s ease',
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── ML Section ─────────────────────────────────────────────────────────────
+const ML_COLORS = { C2: '#DC2626', CHAT: '#2563EB', FILE_TRANSFER: '#16A34A', STREAMING: '#D97706', VOIP: '#7C3AED' };
+
+function MLSection({ ml, distribution, stats }) {
+  if (!ml) return null;
+  const { model_status, model_note, predicted_category, confidence_score,
+          features_available = [], all_class_probabilities, dataset_note } = ml;
+
+  const confPct = confidence_score != null ? (confidence_score * 100).toFixed(1) : null;
   const probaArr = all_class_probabilities
     ? Object.entries(all_class_probabilities)
         .map(([name, value]) => ({ name, value: parseFloat((value * 100).toFixed(1)) }))
@@ -187,67 +254,338 @@ function MLSection({ ml }) {
     : [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Model note */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.75rem 0.875rem', borderRadius: 8, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
-        <FlaskConical style={{ width: 13, height: 13, color: '#7C3AED', flexShrink: 0, marginTop: 1 }} />
-        <p style={{ fontSize: 11, color: '#6D28D9', lineHeight: 1.65 }}>
-          <strong>ML Traffic Classifier Active.</strong>{' '}
-          {dataset_note || 'RandomForestClassifier trained on VNAT Feature Dataframe.'}
-        </p>
-      </div>
-
-      {/* Prediction block */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-        <div>
-          <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 6 }}>Predicted Category</p>
-          <p style={{ fontSize: '1.75rem', fontWeight: 700, color: '#6D28D9' }}>{predicted_category}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Status banner */}
+      {model_status === 'not_applicable' ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <AlertCircle style={{ width: 15, height: 15, color: '#64748B', flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>Classification Not Applicable</p>
+            <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>{model_note}</p>
+          </div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 6 }}>Confidence</p>
-          <p style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0F172A' }}>{conf != null ? `${conf}%` : 'N/A'}</p>
+      ) : model_status !== 'trained_model' ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', marginBottom: 2 }}>Model Notice</p>
+            <p style={{ fontSize: 12, color: '#B45309', lineHeight: 1.6 }}>{model_note}</p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Active model notice */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.75rem 0.875rem', borderRadius: 8, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
+            <FlaskConical style={{ width: 14, height: 14, color: '#7C3AED', flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 11, color: '#6D28D9', lineHeight: 1.6 }}>
+              <strong>Random Forest Traffic Classifier Active.</strong>{' '}
+              {dataset_note || 'Trained on MIT Lincoln Laboratory VNAT Feature Dataframe (15,093 samples).'}
+            </p>
+          </div>
 
-      {/* Category probabilities */}
-      {probaArr.length > 0 && (
-        <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-          <p style={{ padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-            Category Probabilities
-          </p>
-          <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.625rem' }}>
-            {probaArr.map(d => (
-              <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: ML_COLORS[d.name] || '#94A3B8', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontWeight: 500, color: '#475569' }}>{d.name}</span>
+          {/* Prediction & Confidence Block */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ padding: '1.25rem', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 6 }}>
+                Predicted Traffic Category
+              </p>
+              <p style={{ fontSize: '1.75rem', fontWeight: 800, color: ML_COLORS[predicted_category] || '#6D28D9', lineHeight: 1.1 }}>
+                {predicted_category}
+              </p>
+              <p style={{ fontSize: 11, color: '#64748B', marginTop: 6 }}>
+                Inferred from inter-arrival timing & flow volume metrics
+              </p>
+            </div>
+
+            <div style={{ padding: '1.25rem', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 6 }}>
+                Model Confidence Score
+              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>
+                  {confPct != null ? `${confPct}%` : 'N/A'}
+                </span>
+                <span style={{ fontSize: 11, color: '#64748B' }}>probability</span>
+              </div>
+              {confPct != null && (
+                <div style={{ height: 6, width: '100%', backgroundColor: '#E2E8F0', borderRadius: 3, marginTop: 10, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', width: `${confPct}%`,
+                    backgroundColor: parseFloat(confPct) > 75 ? '#16A34A' : parseFloat(confPct) > 50 ? '#2563EB' : '#D97706',
+                    borderRadius: 3,
+                  }} />
                 </div>
-                <span style={{ fontSize: 12, color: '#94A3B8', fontVariantNumeric: 'tabular-nums' }}>{d.value}%</span>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Explanatory note */}
-      <p style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.65, borderLeft: '2px solid #DDD6FE', paddingLeft: '0.75rem' }}>{model_note}</p>
+          {/* Probability Breakdown across categories */}
+          {probaArr.length > 0 && (
+            <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+              <p style={{ padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
+                Class Probability Breakdown
+              </p>
+              <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.625rem' }}>
+                {probaArr.map(d => (
+                  <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.375rem 0.5rem', borderRadius: 4, backgroundColor: '#F8FAFC' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: ML_COLORS[d.name] || '#94A3B8', flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, fontWeight: 500, color: '#334155' }}>{d.name}</span>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#0F172A' }}>{d.value}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* Features used */}
-      {features_available.length > 0 && (
-        <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-          <p style={{ padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-            Features Used
+          {/* Model Note */}
+          <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, borderLeft: '2px solid #DDD6FE', paddingLeft: '0.75rem' }}>
+            {model_note}
           </p>
-          <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
-            {features_available.map((f, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <CheckCircle style={{ width: 10, height: 10, color: '#16A34A', flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: '#64748B' }}>{f}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </>
       )}
+
+      {/* ── Packet Size Distribution ── */}
+      <div style={{ marginTop: '0.5rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.75rem' }}>
+          <BarChart3 style={{ width: 14, height: 14, color: '#2563EB' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Packet-Size Distribution (Actual PCAP Data)
+          </span>
+        </div>
+        <PacketSizeDistribution distribution={distribution} stats={stats} />
+      </div>
+    </div>
+  );
+}
+
+// ── Packet-Level Forensics Table ───────────────────────────────────────────
+function PacketForensicsTable({ packets = [], totalCount = 0 }) {
+  const [filterProto, setFilterProto] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedRow, setExpandedRow] = useState(null);
+
+  const toggleRow = (num) => {
+    setExpandedRow(expandedRow === num ? null : num);
+  };
+
+  const filtered = useMemo(() => {
+    return packets.filter(p => {
+      const matchProto = filterProto === 'ALL' || p.protocol?.toUpperCase() === filterProto.toUpperCase();
+      const matchSearch =
+        !searchQuery ||
+        p.src_ip?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.dst_ip?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.info?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(p.number).includes(searchQuery);
+      return matchProto && matchSearch;
+    });
+  }, [packets, filterProto, searchQuery]);
+
+  const protoBadge = (proto) => {
+    switch (proto?.toUpperCase()) {
+      case 'ESP':   return { bg: '#F3E8FF', text: '#7E22CE', border: '#E9D5FF' };
+      case 'IKE':
+      case 'ISAKMP': return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
+      case 'TCP':   return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
+      case 'UDP':   return { bg: '#FFFBEB', text: '#B45309', border: '#FDE68A' };
+      default:      return { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0' };
+    }
+  };
+
+  if (!packets || packets.length === 0) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8', fontSize: 13, backgroundColor: '#F8FAFC', borderRadius: 8 }}>
+        No packet-level data available. Run analysis on a PCAP file to view packet forensics.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      {/* Controls: search and protocol filter */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ position: 'relative' }}>
+            <Search style={{ width: 13, height: 13, color: '#94A3B8', position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Search IP, info or #..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                fontSize: 12, padding: '4px 10px 4px 28px', borderRadius: 6,
+                border: '1px solid #CBD5E1', outline: 'none', width: 190,
+              }}
+            />
+          </div>
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} style={{ fontSize: 11, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer' }}>
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {['ALL', 'IKE', 'ESP', 'UDP', 'TCP'].map(proto => (
+            <button
+              key={proto}
+              onClick={() => setFilterProto(proto)}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
+                border: filterProto === proto ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                backgroundColor: filterProto === proto ? '#EFF6FF' : '#FFFFFF',
+                color: filterProto === proto ? '#1D4ED8' : '#64748B',
+                cursor: 'pointer',
+              }}>
+              {proto}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Packet count status note */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748B' }}>
+        <span>
+          Showing {filtered.length} of {packets.length} extracted packets
+          {totalCount > packets.length && ` (from ${totalCount} total in capture)`}
+        </span>
+        <span style={{ fontStyle: 'italic', color: '#94A3B8' }}>Click any row to toggle forensic details</span>
+      </div>
+
+      {/* Table */}
+      <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+        <div style={{ overflowX: 'auto', maxHeight: 420 }}>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 10, borderBottom: '1px solid #E2E8F0' }}>
+              <tr>
+                <th style={{ padding: '0.5rem 0.625rem', width: 36 }}></th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>#</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Time</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Source IP</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Destination IP</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Protocol</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Length</th>
+                <th style={{ padding: '0.5rem 0.625rem', fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Info</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(pkt => {
+                const isExpanded = expandedRow === pkt.number;
+                const b = protoBadge(pkt.protocol);
+                return (
+                  <tr
+                    key={pkt.number}
+                    onClick={() => toggleRow(pkt.number)}
+                    style={{
+                      borderBottom: '1px solid #F1F5F9',
+                      cursor: 'pointer',
+                      backgroundColor: isExpanded ? '#F0F9FF' : 'transparent',
+                    }}>
+                    <td style={{ padding: '0.5rem 0.625rem', textAlign: 'center', color: '#94A3B8' }}>
+                      {isExpanded ? <ChevronDown style={{ width: 13, height: 13, color: '#2563EB' }} /> : <ChevronRight style={{ width: 13, height: 13 }} />}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', fontWeight: 600, color: '#475569' }}>
+                      {pkt.number}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
+                      {pkt.timestamp}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: '#0F172A' }}>
+                      {pkt.src_ip}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: '#0F172A' }}>
+                      {pkt.dst_ip}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem' }}>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        backgroundColor: b.bg, color: b.text, border: `1px solid ${b.border}`
+                      }}>
+                        {pkt.protocol}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
+                      {pkt.length} B
+                    </td>
+                    <td style={{ padding: '0.5rem 0.625rem', color: '#334155', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pkt.info}>
+                      {pkt.info}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Expandable Forensic Details Drawer */}
+        {expandedRow !== null && (() => {
+          const ep = packets.find(p => p.number === expandedRow);
+          if (!ep) return null;
+          const det = ep.details || {};
+          return (
+            <div style={{ padding: '0.875rem 1.25rem', backgroundColor: '#F8FAFC', borderTop: '2px solid #BFDBFE' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Binary style={{ width: 14, height: 14, color: '#2563EB' }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
+                    Packet #{ep.number} Forensic Detail
+                  </span>
+                </div>
+                <button
+                  onClick={() => setExpandedRow(null)}
+                  style={{ fontSize: 11, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  Close
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: 11 }}>
+                <div>
+                  <span style={{ color: '#64748B', fontWeight: 600 }}>IP Flow: </span>
+                  <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{ep.src_ip} → {ep.dst_ip}</span>
+                </div>
+                {det.src_port && (
+                  <div>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>Ports: </span>
+                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.src_port} → {det.dst_port}</span>
+                  </div>
+                )}
+                {det.esp_spi && (
+                  <div>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>ESP SPI: </span>
+                    <span style={{ fontFamily: 'monospace', color: '#7E22CE', fontWeight: 700 }}>{det.esp_spi}</span>
+                  </div>
+                )}
+                {det.esp_seq && (
+                  <div>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>ESP Sequence #: </span>
+                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.esp_seq}</span>
+                  </div>
+                )}
+                {det.ike_exchange && (
+                  <div>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>IKE Exchange: </span>
+                    <span style={{ color: '#1D4ED8', fontWeight: 600 }}>{det.ike_exchange}</span>
+                  </div>
+                )}
+                {det.ike_msg_id && (
+                  <div>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>Message ID: </span>
+                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.ike_msg_id}</span>
+                  </div>
+                )}
+                {det.layers && det.layers.length > 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#64748B', fontWeight: 600 }}>Protocol Layer Stack: </span>
+                    <span style={{ color: '#0F172A', fontWeight: 600 }}>{det.layers.join(' ➔ ')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
@@ -258,7 +596,7 @@ function SectionHead({ icon: Icon, title, action }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Icon style={{ width: 15, height: 15, color: '#2563EB' }} />
-        <span style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{title}</span>
       </div>
       {action}
     </div>
@@ -375,7 +713,7 @@ export default function AnalysisDetail() {
             {sa?.risk_level ?? 'Unknown'}
           </span>
           {sa?.score_explanation && (
-            <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, marginTop: 4, maxWidth: 200 }}>
+            <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, marginTop: 4, maxWidth: 220 }}>
               {sa.score_explanation}
             </p>
           )}
@@ -394,11 +732,11 @@ export default function AnalysisDetail() {
         </p>
       </div>
 
-      {/* ── Row 3: Security Findings ────────────────────────────────────── */}
+      {/* ── Feature 3: Evidence-Based Security Findings ───────────────── */}
       <div className="card" style={{ padding: '1.25rem' }}>
         <SectionHead
           icon={AlertTriangle}
-          title="Security Findings"
+          title="Evidence-Based Security Findings"
           action={<span style={{ fontSize: 12, color: '#94A3B8' }}>{sa?.findings?.length ?? 0} finding{sa?.findings?.length !== 1 ? 's' : ''}</span>}
         />
 
@@ -422,12 +760,12 @@ export default function AnalysisDetail() {
         {(sa?.findings?.length ?? 0) === 0 ? (
           <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '1.5rem' }}>No security findings.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             {highF.map((f, i) => <FindingCard key={i} f={f} />)}
             {infoF.length > 0 && (
               <>
                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginTop: 8 }}>
-                  Informational
+                  Informational & Hardening Observations
                 </p>
                 {infoF.map((f, i) => <FindingCard key={`info-${i}`} f={f} />)}
               </>
@@ -438,10 +776,23 @@ export default function AnalysisDetail() {
         <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
       </div>
 
-      {/* ── Row 4: ML Classification ────────────────────────────────────── */}
+      {/* ── Feature 1: ML Traffic Classification & Insights ──────────── */}
       <div className="card" style={{ padding: '1.25rem' }}>
-        <SectionHead icon={Cpu} title="ML Traffic Classification" />
-        <MLSection ml={ml} />
+        <SectionHead icon={Cpu} title="ML Confidence + Traffic Insights" />
+        <MLSection
+          ml={ml}
+          distribution={m?.packet_size_distribution}
+          stats={m?.packet_size_stats}
+        />
+      </div>
+
+      {/* ── Feature 2: Packet-Level Forensics ─────────────────────────── */}
+      <div className="card" style={{ padding: '1.25rem' }}>
+        <SectionHead icon={Binary} title="Packet-Level Forensics" />
+        <PacketForensicsTable
+          packets={m?.packets}
+          totalCount={m?.packet_count}
+        />
       </div>
 
     </div>
