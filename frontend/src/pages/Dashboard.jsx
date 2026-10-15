@@ -74,7 +74,7 @@ function SystemHealthPanel({ sysDeps, loading }) {
       icon: Database, label: 'Database',
       ok: mg?.available === true,
       loading,
-      text: loading ? 'Checking…' : mg?.available ? 'Connected' : 'Unavailable',
+      text: loading ? 'Checking…' : mg?.available ? (mg?.label || (mg?.type === 'sqlite' ? 'Ready — Local DB' : 'Connected')) : 'Unavailable',
     },
   ];
 

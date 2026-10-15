@@ -35,16 +35,15 @@ def system_dependencies():
     # — TShark —
     tshark_info = get_tshark_info()  # never raises — always returns dict
 
-    # — MongoDB —
-    from core.database import collection as _mongo_collection
-    mongo_ok = _mongo_collection is not None
-    try:
-        if mongo_ok:
-            from core.database import client as _mongo_client
-            _mongo_client.admin.command('ping')
-    except Exception:
-        mongo_ok = False
-    mongodb_info = {"available": mongo_ok}
+    # — Database (MongoDB Atlas / Local SQLite) —
+    from core.database import is_db_connected, get_db_type
+    db_ok = is_db_connected()
+    db_backend = get_db_type()
+    mongodb_info = {
+        "available": db_ok,
+        "type": db_backend,
+        "label": "Ready — MongoDB" if db_backend == "mongodb" else "Ready — Local DB" if db_backend == "sqlite" else "Unavailable",
+    }
 
     # — ML model —
     import os as _os
