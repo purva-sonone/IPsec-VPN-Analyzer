@@ -2,6 +2,8 @@
 database.py – MongoDB persistence for IPsec VPN Analyzer history.
 
 Uses pymongo to connect to MongoDB Atlas.
+MONGO_URI must be set as an environment variable (e.g. in the Render dashboard).
+Never hardcode credentials in this file.
 """
 
 import pymongo
@@ -11,11 +13,9 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Load MongoDB URI from environment variable (set in Render dashboard)
-MONGO_URI = os.environ.get(
-    "MONGO_URI",
-    "mongodb+srv://purvasonone01:purva123@purva.8bjhhdr.mongodb.net/?appName=purva"
-)
+# Load MongoDB URI exclusively from environment variable.
+# Set MONGO_URI in the Render dashboard (Environment → Secret Files or Env Vars).
+MONGO_URI = os.environ.get("MONGO_URI")  # No hardcoded fallback — credentials must stay secret.
 
 client = None
 db = None
@@ -24,6 +24,12 @@ collection = None
 def init_db():
     """Connect to MongoDB and setup collection. Called once at startup."""
     global client, db, collection
+    if not MONGO_URI:
+        logger.warning(
+            "MONGO_URI environment variable is not set. "
+            "MongoDB will be unavailable. Set it in the Render dashboard."
+        )
+        return
     try:
         # Connect with a timeout so it doesn't hang indefinitely if offline
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)

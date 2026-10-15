@@ -3,18 +3,22 @@ services:
   - type: web
     name: ipsec-vpn-analyzer-backend
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     envVars:
       - key: PYTHON_ENV
         value: production
-    healthCheckPath: /
+      - key: MONGO_URI
+        sync: false   # Set this secret in the Render dashboard; never commit the value
+    healthCheckPath: /api/health
 
   # ── Frontend: React Static Site ────────────────────────────────────────────
+  # Static sites are always free on Render — do NOT add a 'plan:' key here.
   - type: web
     name: ipsec-vpn-analyzer-frontend
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
+    publishDir: ./frontend/dist
     envVars:
       - key: VITE_API_URL
         value: https://ipsec-vpn-analyzer-backend.onrender.com

@@ -26,8 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the entire backend
 COPY backend/ .
 
-# Expose the port FastAPI runs on
+# Render assigns $PORT at runtime; default to 8000 for local Docker runs.
+ENV PORT=8000
 EXPOSE 8000
 
-# Start the FastAPI server
-CMD ["python", "main.py"]
+# Use shell form so $PORT is expanded at container start time.
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
