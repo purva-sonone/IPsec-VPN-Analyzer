@@ -125,13 +125,25 @@ async def upload_pcap(file: UploadFile = File(...)):
 @router.get("/history")
 def list_history():
     """Return all previous analyses (lightweight – no full result blobs)."""
-    return get_all_analyses()
+    try:
+        return get_all_analyses()
+    except Exception:
+        return []
 
 
 @router.get("/history/stats")
 def history_stats():
     """Aggregate dashboard statistics."""
-    return get_history_stats()
+    try:
+        return get_history_stats()
+    except Exception:
+        return {
+            "total_analyses": 0,
+            "ipsec_captures": 0,
+            "high_risk": 0,
+            "informational": 0,
+            "ml_classifications": 0,
+        }
 
 
 @router.get("/history/{analysis_id}")

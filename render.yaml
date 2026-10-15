@@ -10,6 +10,8 @@ services:
         value: production
       - key: MONGO_URI
         sync: false   # Set this secret in the Render dashboard; never commit the value
+      - key: FRONTEND_ORIGIN
+        value: https://ipsec-vpn-analyzer-frontend.onrender.com
     healthCheckPath: /api/health
 
   # ── Frontend: React Static Site ────────────────────────────────────────────

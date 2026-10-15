@@ -210,9 +210,12 @@ export default function Dashboard() {
     api.systemDeps().then(setSysDeps).catch(() => setSysDeps(null)).finally(() => setDepsLoading(false));
     try {
       const h = await api.history();
-      setHistory(h);
-    } catch {
-      setError('Cannot connect to backend. Make sure the server is running on port 8000.');
+      setHistory(Array.isArray(h) ? h : []);
+    } catch (e) {
+      console.warn('History fetch error:', e);
+      setError(e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')
+        ? 'Cannot connect to backend API. Please verify the backend service is running.'
+        : `Unable to load analysis history: ${e.message}`);
     } finally { setLoading(false); }
   };
 
@@ -250,7 +253,9 @@ export default function Dashboard() {
         <div className="alert-error">
           <AlertTriangle style={{ width: 15, height: 15, color: '#B91C1C', flexShrink: 0, marginTop: 1 }} />
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#B91C1C', marginBottom: 2 }}>Backend Offline</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#B91C1C', marginBottom: 2 }}>
+              {error.includes('Cannot connect') ? 'Backend Offline' : 'Data Loading Notice'}
+            </p>
             <p style={{ fontSize: 12, color: '#DC2626' }}>{error}</p>
             <button onClick={load} style={{ marginTop: 6, fontSize: 12, color: '#B91C1C', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               Retry Connection

@@ -11,14 +11,21 @@ app = FastAPI(
 )
 
 # Allow CORS for the React frontend.
-# VITE_API_URL / the frontend origin is set via FRONTEND_ORIGIN env var in Render.
-# Falls back to wildcard so local dev keeps working without extra config.
-_frontend_origin = os.environ.get("FRONTEND_ORIGIN", "*")
-_origins = ["*"] if _frontend_origin == "*" else [_frontend_origin, "http://localhost:5173"]
+_env_origin = os.environ.get("FRONTEND_ORIGIN", "").strip().rstrip("/")
+_origins = [
+    "https://ipsec-vpn-analyzer-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+if _env_origin and _env_origin not in _origins and _env_origin != "*":
+    _origins.append(_env_origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=["*"] if _env_origin == "*" else _origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
