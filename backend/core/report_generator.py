@@ -249,7 +249,7 @@ def generate_pdf(report: dict) -> bytes:
     for r in sa.get("rules_evaluated", []):
         raw_st = r.get("status") or "UNKNOWN"
         if raw_st == "PASS":
-            disp_st = "SECURE"
+            disp_st = "RULE PASSED"
         elif raw_st == "FAIL":
             disp_st = "WEAKNESS DETECTED"
         else:
@@ -277,7 +277,7 @@ def generate_pdf(report: dict) -> bytes:
         r_offset = len(sa.get("rules_evaluated", []))
         for ri in range(1, r_offset + 1):
             st = audit_data[ri][2]
-            if st == "SECURE":
+            if st == "RULE PASSED":
                 c = GREEN
             elif st == "WEAKNESS DETECTED":
                 c = RED

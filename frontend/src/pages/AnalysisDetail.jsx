@@ -148,7 +148,7 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
             const rawStatus = r.status || 'UNKNOWN';
             const isPass = rawStatus === 'PASS';
             const isFail = rawStatus === 'FAIL';
-            const displayStatus = isPass ? 'SECURE' : isFail ? 'WEAKNESS DETECTED' : rawStatus;
+            const displayStatus = isPass ? 'RULE PASSED' : isFail ? 'WEAKNESS DETECTED' : rawStatus;
 
             let color = '#D97706';
             let icon = <AlertCircle style={{ width: 11, height: 11 }} />;
@@ -250,7 +250,7 @@ function AnalysisCoverageSummary({ evaluated = [], skipped = [] }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
           <CheckCircle style={{ width: 12, height: 12, color: '#15803D' }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>{passCount}</span>
-          <span style={{ fontSize: 11, color: '#166534' }}>Secure</span>
+          <span style={{ fontSize: 11, color: '#166534' }}>Rule Passed</span>
         </div>
         {failCount > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
