@@ -3,6 +3,9 @@ from fastapi.responses import Response
 import os
 import shutil
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 from core.analyzer import analyze_pcap, get_tshark_info
 from core.security_rules import evaluate_security
 from core.ml_model import predict_traffic_category
@@ -115,6 +118,13 @@ async def upload_pcap(file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Packet parsing failed: {e}")
+    finally:
+        # Cleanup uploaded temporary PCAP file to prevent disk exhaustion
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as rem_err:
+                logger.warning("Failed to remove temporary PCAP file %s: %s", file_path, rem_err)
 
     return final_report
 

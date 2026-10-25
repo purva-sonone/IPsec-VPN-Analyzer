@@ -6,6 +6,9 @@ import {
   SkipForward, ListChecks, AlertCircle, Layers, RefreshCw,
   Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer
+} from 'recharts';
 import { api } from '../lib/api';
 import { fmtDate, riskColor, sevColor, strengthOf } from '../lib/utils';
 
@@ -127,7 +130,7 @@ function FindingCard({ f }) {
 function RuleAudit({ evaluated = [], skipped = [] }) {
   if (evaluated.length === 0 && skipped.length === 0) return null;
   return (
-    <div style={{ marginTop: '1.25rem', borderRadius: 10, border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', overflow: 'hidden' }}>
+    <div id="rule-audit-trail" style={{ marginTop: '1.25rem', borderRadius: 10, border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.625rem 1rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
         <ListChecks style={{ width: 12, height: 12, color: '#94A3B8' }} />
         <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>Rule Audit Trail</span>
@@ -142,15 +145,29 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
         </thead>
         <tbody>
           {evaluated.map((r, i) => {
-            const isFail = r.status === 'FAIL';
+            const rawStatus = r.status || 'UNKNOWN';
+            const isPass = rawStatus === 'PASS';
+            const isFail = rawStatus === 'FAIL';
+            const displayStatus = isPass ? 'SECURE' : isFail ? 'WEAKNESS DETECTED' : rawStatus;
+
+            let color = '#D97706';
+            let icon = <AlertCircle style={{ width: 11, height: 11 }} />;
+            if (isPass) {
+              color = '#15803D';
+              icon = <CheckCircle style={{ width: 11, height: 11 }} />;
+            } else if (isFail) {
+              color = '#B91C1C';
+              icon = <XCircle style={{ width: 11, height: 11 }} />;
+            }
+
             return (
               <tr key={`ev-${i}`} style={{ borderBottom: '1px solid #F8FAFC' }}>
                 <td style={{ padding: '0.625rem 0.875rem', fontWeight: 500, color: '#0F172A' }}>{r.rule}</td>
                 <td style={{ padding: '0.625rem 0.875rem', color: '#475569', fontFamily: 'monospace' }}>{r.observed_value || '—'}</td>
                 <td style={{ padding: '0.625rem 0.875rem' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, fontSize: 11, color: isFail ? '#B91C1C' : '#15803D' }}>
-                    {isFail ? <XCircle style={{ width: 11, height: 11 }} /> : <CheckCircle style={{ width: 11, height: 11 }} />}
-                    {r.status || 'PASS'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, fontSize: 11, color }}>
+                    {icon}
+                    {displayStatus}
                   </span>
                 </td>
               </tr>
@@ -172,6 +189,125 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
       {skipped.length > 0 && (
         <div style={{ padding: '0.5rem 0.875rem', borderTop: '1px solid #F1F5F9', fontSize: 11, color: '#94A3B8', backgroundColor: '#FAFBFC' }}>
           {skipped[0]?.reason}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Analysis Coverage Summary ──────────────────────────────────────────────
+function AnalysisCoverageSummary({ evaluated = [], skipped = [] }) {
+  if (evaluated.length === 0 && skipped.length === 0) return null;
+
+  const passCount  = evaluated.filter(r => r.status === 'PASS').length;
+  const failCount  = evaluated.filter(r => r.status === 'FAIL').length;
+  const otherCount = evaluated.filter(r => r.status !== 'PASS' && r.status !== 'FAIL').length;
+  const skipCount  = skipped.length;
+  const totalRan   = evaluated.length;
+
+  // Scroll to the Rule Audit Trail anchor below
+  const scrollToAudit = () => {
+    const el = document.getElementById('rule-audit-trail');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    <div style={{
+      marginTop: '1rem',
+      borderRadius: 10,
+      border: '1px solid #E2E8F0',
+      backgroundColor: '#FFFFFF',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0.625rem 1rem',
+        borderBottom: '1px solid #E2E8F0',
+        backgroundColor: '#F8FAFC',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ListChecks style={{ width: 12, height: 12, color: '#94A3B8' }} />
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8' }}>
+            Analysis Coverage Summary
+          </span>
+        </div>
+        <button
+          onClick={scrollToAudit}
+          style={{
+            fontSize: 10, fontWeight: 600, color: '#2563EB',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '2px 6px', borderRadius: 4,
+          }}
+          title="Jump to full Rule Audit Trail"
+        >
+          View Full Audit ↓
+        </button>
+      </div>
+
+      {/* Count badges */}
+      <div style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1rem', flexWrap: 'wrap', borderBottom: '1px solid #F1F5F9' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+          <CheckCircle style={{ width: 12, height: 12, color: '#15803D' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>{passCount}</span>
+          <span style={{ fontSize: 11, color: '#166534' }}>Secure</span>
+        </div>
+        {failCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
+            <XCircle style={{ width: 12, height: 12, color: '#B91C1C' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#B91C1C' }}>{failCount}</span>
+            <span style={{ fontSize: 11, color: '#991B1B' }}>Weakness Detected</span>
+          </div>
+        )}
+        {otherCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+            <AlertCircle style={{ width: 12, height: 12, color: '#D97706' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#D97706' }}>{otherCount}</span>
+            <span style={{ fontSize: 11, color: '#92400E' }}>Other</span>
+          </div>
+        )}
+        {skipCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+            <SkipForward style={{ width: 12, height: 12, color: '#D97706' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#D97706' }}>{skipCount}</span>
+            <span style={{ fontSize: 11, color: '#92400E' }}>Skipped</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.35rem 0.75rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <Info style={{ width: 12, height: 12, color: '#64748B' }} />
+          <span style={{ fontSize: 11, color: '#64748B' }}>{totalRan} of {totalRan + skipCount} rules ran</span>
+        </div>
+      </div>
+
+      {/* Skipped parameters detail */}
+      {skipCount > 0 && (
+        <div style={{ padding: '0.75rem 1rem' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Parameters Not Verifiable from This Capture
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {skipped.map((r, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 8,
+                padding: '0.5rem 0.75rem', borderRadius: 6,
+                backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+              }}>
+                <SkipForward style={{ width: 11, height: 11, color: '#D97706', flexShrink: 0, marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#92400E' }}>{r.rule}</span>
+                  {r.reason && (
+                    <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.55, marginTop: 2 }}>
+                      {r.reason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: '#94A3B8', marginTop: '0.625rem', lineHeight: 1.6 }}>
+            Skipped checks are neither passed nor failed — the required parameters were not observable
+            in this packet capture. Skipped rules do not contribute to the risk score.
+          </p>
         </div>
       )}
     </div>
@@ -241,17 +377,44 @@ function PacketSizeDistribution({ distribution = [], stats = {} }) {
 // ── ML Section ─────────────────────────────────────────────────────────────
 const ML_COLORS = { C2: '#DC2626', CHAT: '#2563EB', FILE_TRANSFER: '#16A34A', STREAMING: '#D97706', VOIP: '#7C3AED' };
 
+// Confidence thresholds — defined once, clearly, here.
+// LOW_CONF_THRESHOLD : predictions below this percentage are flagged as low-confidence
+// AMBIG_SPREAD_THRESHOLD : if (1st class score - 2nd class score) < this, flag as ambiguous
+const LOW_CONF_THRESHOLD   = 50;   // %
+const AMBIG_SPREAD_THRESHOLD = 15; // percentage points
+
+function MLProbaTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div style={{
+      padding: '6px 10px', borderRadius: 6, fontSize: 11,
+      backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0',
+      boxShadow: '0 2px 6px rgba(15,23,42,0.08)',
+    }}>
+      <span style={{ fontWeight: 700, color: ML_COLORS[d.name] || '#334155' }}>{d.name}</span>
+      <span style={{ color: '#64748B', marginLeft: 8 }}>{d.value}%</span>
+    </div>
+  );
+}
+
 function MLSection({ ml, distribution, stats }) {
   if (!ml) return null;
   const { model_status, model_note, predicted_category, confidence_score,
-          features_available = [], all_class_probabilities, dataset_note } = ml;
+          all_class_probabilities, dataset_note } = ml;
 
-  const confPct = confidence_score != null ? (confidence_score * 100).toFixed(1) : null;
+  const confPct = confidence_score != null ? parseFloat((confidence_score * 100).toFixed(1)) : null;
   const probaArr = all_class_probabilities
     ? Object.entries(all_class_probabilities)
         .map(([name, value]) => ({ name, value: parseFloat((value * 100).toFixed(1)) }))
         .sort((a, b) => b.value - a.value)
     : [];
+
+  // Determine confidence/ambiguity flags (only when a trained model result exists)
+  const isLowConf   = confPct != null && confPct < LOW_CONF_THRESHOLD;
+  const spread      = probaArr.length >= 2 ? probaArr[0].value - probaArr[1].value : null;
+  const isAmbiguous = spread != null && spread < AMBIG_SPREAD_THRESHOLD;
+  const isC2        = predicted_category === 'C2';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -293,7 +456,7 @@ function MLSection({ ml, distribution, stats }) {
                 {predicted_category}
               </p>
               <p style={{ fontSize: 11, color: '#64748B', marginTop: 6 }}>
-                Inferred from inter-arrival timing & flow volume metrics
+                Inferred from inter-arrival timing &amp; flow volume metrics
               </p>
             </div>
 
@@ -311,35 +474,116 @@ function MLSection({ ml, distribution, stats }) {
                 <div style={{ height: 6, width: '100%', backgroundColor: '#E2E8F0', borderRadius: 3, marginTop: 10, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', width: `${confPct}%`,
-                    backgroundColor: parseFloat(confPct) > 75 ? '#16A34A' : parseFloat(confPct) > 50 ? '#2563EB' : '#D97706',
-                    borderRadius: 3,
+                    backgroundColor: confPct > 75 ? '#16A34A' : confPct > LOW_CONF_THRESHOLD ? '#2563EB' : '#D97706',
+                    borderRadius: 3, transition: 'width 0.4s ease',
                   }} />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Probability Breakdown across categories */}
-          {probaArr.length > 0 && (
-            <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-              <p style={{ padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-                Class Probability Breakdown
-              </p>
-              <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.625rem' }}>
-                {probaArr.map(d => (
-                  <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.375rem 0.5rem', borderRadius: 4, backgroundColor: '#F8FAFC' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: ML_COLORS[d.name] || '#94A3B8', flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, fontWeight: 500, color: '#334155' }}>{d.name}</span>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#0F172A' }}>{d.value}%</span>
-                  </div>
-                ))}
+          {/* ── Confidence / Ambiguity Caution Notes ────────────────────── */}
+          {(isLowConf || isAmbiguous) && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '0.75rem 1rem', borderRadius: 8,
+              backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
+            }}>
+              <AlertTriangle style={{ width: 14, height: 14, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 3 }}>
+                  {isLowConf && isAmbiguous
+                    ? 'Low Confidence & Ambiguous Prediction'
+                    : isLowConf ? 'Low Confidence Prediction'
+                    : 'Ambiguous Prediction'}
+                </p>
+                <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.6 }}>
+                  {isLowConf && `Confidence is ${confPct}%, below the ${LOW_CONF_THRESHOLD}% threshold. `}
+                  {isAmbiguous && spread != null && `The top two categories differ by only ${spread.toFixed(1)} pp (threshold: ${AMBIG_SPREAD_THRESHOLD} pp). `}
+                  The classifier's output should be treated as indicative for this capture.
+                </p>
               </div>
             </div>
           )}
 
-          {/* Model Note */}
+          {/* ── C2 Classification Caution ────────────────────────────────── */}
+          {isC2 && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '0.75rem 1rem', borderRadius: 8,
+              backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+            }}>
+              <Info style={{ width: 14, height: 14, color: '#B91C1C', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#991B1B', marginBottom: 3 }}>
+                  C2 Classification — Does Not Confirm Malicious Activity
+                </p>
+                <p style={{ fontSize: 11, color: '#B91C1C', lineHeight: 1.6 }}>
+                  The model predicts <strong>C2 (Command &amp; Control)</strong> traffic patterns based on flow
+                  timing and volume statistics. This is a <em>traffic category</em> label from the VNAT
+                  dataset — it does not confirm that the VPN carries malicious traffic or that a
+                  cyberattack is underway. The same flow features can appear in legitimate control-plane
+                  or management traffic. Treat this as a signal for further investigation only.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Class Probability Bar Chart (Recharts) ───────────────────── */}
+          {probaArr.length > 0 && (
+            <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+              <p style={{
+                padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8',
+                borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC',
+              }}>
+                Class Probability Breakdown
+              </p>
+              <div style={{ padding: '0.875rem 1rem' }}>
+                <ResponsiveContainer width="100%" height={probaArr.length * 36 + 8}>
+                  <BarChart
+                    data={probaArr}
+                    layout="vertical"
+                    margin={{ top: 0, right: 40, left: 80, bottom: 0 }}
+                    barSize={14}
+                  >
+                    <XAxis
+                      type="number"
+                      domain={[0, 100]}
+                      tickFormatter={v => `${v}%`}
+                      tick={{ fontSize: 10, fill: '#94A3B8' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#334155' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={76}
+                    />
+                    <Tooltip content={<MLProbaTooltip />} cursor={{ fill: 'rgba(37,99,235,0.05)' }} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                      {probaArr.map((d) => (
+                        <Cell
+                          key={d.name}
+                          fill={d.name === predicted_category
+                            ? ML_COLORS[d.name] || '#6D28D9'
+                            : `${ML_COLORS[d.name] || '#94A3B8'}50`}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, textAlign: 'right' }}>
+                  Highlighted bar = predicted category
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Model Note — classification scope disclaimer */}
           <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, borderLeft: '2px solid #DDD6FE', paddingLeft: '0.75rem' }}>
             {model_note}
           </p>
@@ -773,6 +1017,7 @@ export default function AnalysisDetail() {
           </div>
         )}
 
+        <AnalysisCoverageSummary evaluated={sa?.rules_evaluated ?? []} skipped={sa?.rules_skipped ?? []} />
         <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
       </div>
 

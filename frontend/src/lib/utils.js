@@ -43,7 +43,7 @@ export function sevColor(sev) {
 export function strengthOf(value) {
   if (!value || value === 'Not Extracted' || value === 'Unknown') return null;
   const STRONG = ['AES-GCM', 'AES-CCM', 'ChaCha20', 'Group 14', 'Group 19', 'Group 20', 'Group 21', 'Group 31', 'ECDSA', 'SHA-256', 'SHA-384', 'SHA-512', 'IKEv2'];
-  const WEAK   = ['DES', '3DES', 'RC4', 'RC5', 'NULL', 'Blowfish', 'Group 1', 'Group 2', 'Group 5', 'IKEv1', 'IDEA', 'CAST', 'MD5'];
+  const WEAK   = ['DES', '3DES', 'RC4', 'RC5', 'NULL', 'Blowfish', 'Group 1', 'Group 2', 'Group 5', 'IKEv1', 'IDEA', 'CAST', 'MD5', 'Alternate 1024-bit MODP', '1024-bit MODP'];
 
   if (STRONG.some(s => new RegExp(`\\b${s.replace('-', '\\-')}\\b`, 'i').test(value) || value.includes(s)))
     return { label: 'Strong', cls: 'badge strength-strong' };

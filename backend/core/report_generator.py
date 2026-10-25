@@ -247,12 +247,19 @@ def generate_pdf(report: dict) -> bytes:
     story.append(Paragraph("Rule Audit", S["h2"]))
     audit_data = [["Rule", "Observed Value", "Status"]]
     for r in sa.get("rules_evaluated", []):
-        audit_data.append([r.get("rule",""), r.get("observed_value","—"), "PASS"])
+        raw_st = r.get("status") or "UNKNOWN"
+        if raw_st == "PASS":
+            disp_st = "SECURE"
+        elif raw_st == "FAIL":
+            disp_st = "WEAKNESS DETECTED"
+        else:
+            disp_st = raw_st
+        audit_data.append([r.get("rule",""), r.get("observed_value","—"), disp_st])
     for r in sa.get("rules_skipped", []):
         audit_data.append([r.get("rule",""), "Not Extracted", "SKIPPED"])
 
     if len(audit_data) > 1:
-        t = Table(audit_data, colWidths=[7*cm, 6*cm, 4*cm], repeatRows=1)
+        t = Table(audit_data, colWidths=[6.5*cm, 5.5*cm, 5.0*cm], repeatRows=1)
         sty = [
             ("BACKGROUND",  (0, 0), (-1, 0),  NAVY),
             ("TEXTCOLOR",   (0, 0), (-1, 0),  WHITE),
@@ -269,7 +276,14 @@ def generate_pdf(report: dict) -> bytes:
         # Color status column
         r_offset = len(sa.get("rules_evaluated", []))
         for ri in range(1, r_offset + 1):
-            sty.append(("TEXTCOLOR",  (2, ri), (2, ri), GREEN))
+            st = audit_data[ri][2]
+            if st == "SECURE":
+                c = GREEN
+            elif st == "WEAKNESS DETECTED":
+                c = RED
+            else:
+                c = AMBER
+            sty.append(("TEXTCOLOR",  (2, ri), (2, ri), c))
             sty.append(("FONTNAME",   (2, ri), (2, ri), "Helvetica-Bold"))
         for ri in range(r_offset + 1, len(audit_data)):
             sty.append(("TEXTCOLOR",  (2, ri), (2, ri), AMBER))
@@ -290,9 +304,9 @@ def generate_pdf(report: dict) -> bytes:
             ["Field",           "Value"],
             ["Predicted Category", ml.get("predicted_category","—")],
             ["Confidence",      conf_str],
-            ["Model",           "RandomForestClassifier (200 trees)"],
+            ["Model",           "RandomForestClassifier (500 trees)"],
             ["Training Dataset","VNAT Feature Dataframe (MIT Lincoln Laboratory)"],
-            ["Test Accuracy",   "98.48%"],
+            ["Test Accuracy",   "98.74%"],
         ]
         story.append(_table(ml_data, [6*cm, 11*cm]))
 

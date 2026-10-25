@@ -14,7 +14,7 @@ IMPORTANT — HONEST LIMITATIONS:
   - For short captures (< ~20 packets), inter-arrival-time features have
     high variance and predictions should be treated as indicative only.
 
-Model accuracy on held-out test set (20%, stratified): 98.48%
+Model accuracy on held-out test set (20%, stratified): 98.74%
 Dataset: VNAT_Feature_Dataframe_release_1.h5
          https://archive.ll.mit.edu/datasets/vnat/
 """
@@ -241,8 +241,8 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         "features_required_missing": [],
         "all_class_probabilities": all_class_proba,
         "dataset_note": (
-            "Model: RandomForestClassifier (200 trees), "
+            "Model: RandomForestClassifier (500 trees), "
             "trained on VNAT Feature Dataframe (15,093 samples), "
-            "test accuracy 98.48%."
+            "test accuracy 98.74%."
         ),
     }

@@ -1,4 +1,12 @@
+import os
+import sys
 import unittest
+
+# Ensure backend/core is in sys.path whether executed from root, backend, or backend/core
+_CORE_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CORE_DIR not in sys.path:
+    sys.path.insert(0, _CORE_DIR)
+
 from security_rules import evaluate_security
 
 class TestSecurityRules(unittest.TestCase):
@@ -44,6 +52,27 @@ class TestSecurityRules(unittest.TestCase):
         # Rule should not be in rules_evaluated
         dh_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "Diffie-Hellman Group Strength"), None)
         self.assertIsNone(dh_rule)
+
+    def test_esp_payload_protection_pass(self):
+        pcap_results = {
+            "protocols_found": ["IKE", "ESP"],
+            "vpn_mode_inferred": "Tunnel",
+        }
+        res = evaluate_security(pcap_results)
+        esp_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "ESP Payload Protection"), None)
+        self.assertIsNotNone(esp_rule)
+        self.assertEqual(esp_rule["status"], "PASS")
+        self.assertEqual(esp_rule["observed_value"], "ESP Encapsulation Present")
+
+    def test_esp_control_only_not_observed(self):
+        pcap_results = {
+            "protocols_found": ["IKE"],
+        }
+        res = evaluate_security(pcap_results)
+        esp_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "ESP Payload Protection"), None)
+        self.assertIsNotNone(esp_rule)
+        self.assertEqual(esp_rule["status"], "NOT OBSERVED")
+        self.assertEqual(esp_rule["observed_value"], "No ESP Packets Observed")
 
 if __name__ == '__main__':
     unittest.main()

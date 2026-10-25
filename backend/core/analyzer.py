@@ -322,6 +322,8 @@ def _parse_transform_attrs(isakmp_layer, results: dict):
             isakmp_layer,
             # IKEv1 — actual PyShark attribute (from isakmp.ike.attr.authentication_method)
             'ike_attr_authentication_method',
+            # IKEv2 transform type 3 (integrity algorithm)
+            'tf_id_auth',
             # IKEv2 — not typically in SA_INIT; may appear in AUTH exchange
             'auth_method',
             # Additional fallbacks
@@ -359,6 +361,8 @@ def _tshark_fallback(file_path: str, tshark_path: str) -> dict:
             '-e', 'isakmp.key_exchange.dh_group',
             '-e', 'isakmp.tf_id_encr',
             '-e', 'isakmp.tf_id_dh',
+            '-e', 'isakmp.tf_id_auth',
+            '-e', 'isakmp.auth.method',
             '-Y', 'isakmp',
         ]
         result = subprocess.run(
@@ -372,7 +376,14 @@ def _tshark_fallback(file_path: str, tshark_path: str) -> dict:
             parts = line.split('\t')
             if len(parts) < 6:
                 continue
-            ikev1_enc, ikev1_auth, ikev1_dh, ikev2_dh, ikev2_enc, ikev2_dh_tf = parts
+            ikev1_enc = parts[0] if len(parts) > 0 else ""
+            ikev1_auth = parts[1] if len(parts) > 1 else ""
+            ikev1_dh = parts[2] if len(parts) > 2 else ""
+            ikev2_dh = parts[3] if len(parts) > 3 else ""
+            ikev2_enc = parts[4] if len(parts) > 4 else ""
+            ikev2_dh_tf = parts[5] if len(parts) > 5 else ""
+            ikev2_tf_auth = parts[6] if len(parts) > 6 else ""
+            ikev2_auth_m = parts[7] if len(parts) > 7 else ""
 
             # Encryption: prefer IKEv1 field, then IKEv2
             if fields["encryption"] == "Not Extracted":
@@ -388,9 +399,9 @@ def _tshark_fallback(file_path: str, tshark_path: str) -> dict:
                     resolved = _DH_GROUPS.get(dh_raw)
                     fields["key_exchange"] = resolved if resolved else f'DH Group {dh_raw}'
 
-            # Authentication: IKEv1 field
+            # Authentication: IKEv1 auth method, or IKEv2 auth method / integrity algorithm
             if fields["authentication"] == "Not Extracted":
-                auth_raw = ikev1_auth.strip()
+                auth_raw = ikev1_auth.strip() or ikev2_auth_m.strip() or ikev2_tf_auth.strip()
                 if auth_raw:
                     resolved = _AUTH_METHODS.get(auth_raw) or _AUTH_ALGORITHMS.get(auth_raw)
                     fields["authentication"] = resolved if resolved else auth_raw
@@ -449,6 +460,7 @@ def _run_pyshark_sync(file_path: str) -> dict:
     _total_in_bytes:  int = 0
     _total_out_pkts:  int = 0
     _total_in_pkts:   int = 0
+    _local_ip = None
 
     tshark_path = _discover_tshark()  # auto-discover: env var → PATH → common locations
 
@@ -482,9 +494,9 @@ def _run_pyshark_sync(file_path: str) -> dict:
                 # Reverse direction is "in". Falls back gracefully if IP layer missing.
                 try:
                     pkt_src = pkt.ip.src
-                    if not hasattr(_run_pyshark_sync, '_local_ip'):
-                        _run_pyshark_sync._local_ip = pkt_src
-                    is_outgoing = (pkt_src == _run_pyshark_sync._local_ip)
+                    if _local_ip is None:
+                        _local_ip = pkt_src
+                    is_outgoing = (pkt_src == _local_ip)
                 except Exception:
                     is_outgoing = True  # default: treat as outgoing
 
@@ -596,9 +608,6 @@ def _run_pyshark_sync(file_path: str) -> dict:
         loop.close()
 
         # ── Compute flow-level features after packet loop ────────────────────
-        # Reset direction heuristic state for next call
-        if hasattr(_run_pyshark_sync, '_local_ip'):
-            del _run_pyshark_sync._local_ip
 
         def _safe_stats(values):
             """Return (min, max, mean, std) or (0,0,0,0) if list is empty."""

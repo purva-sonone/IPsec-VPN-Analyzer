@@ -283,7 +283,7 @@ def evaluate_security(pcap_results: dict) -> dict:
         rules_evaluated.append({
             "rule": "ESP Payload Protection",
             "observed_value": "No ESP Packets Observed",
-            "status": "PASS",
+            "status": "NOT OBSERVED",
         })
     else:
         rules_skipped.append({
