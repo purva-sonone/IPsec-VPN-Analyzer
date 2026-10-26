@@ -1,0 +1,155 @@
+{
+  "version": "v2",
+  "dataset_source": "MIT Lincoln Laboratory VNAT Dataset",
+  "dataset_url": "https://archive.ll.mit.edu/datasets/vnat/VNAT_Feature_Dataframe_release_1.h5",
+  "dataset_file": "VNAT_Feature_Dataframe_release_1.h5",
+  "dataset_size_mb": 8.59,
+  "total_samples_pre_dedup": 15093,
+  "exact_duplicates_removed": 197,
+  "total_samples_post_dedup": 14896,
+  "train_samples": 11916,
+  "test_samples": 2980,
+  "label_distribution_post_dedup": {
+    "CHAT": 10301,
+    "STREAMING": 1826,
+    "C2": 1675,
+    "FILE_TRANSFER": 851,
+    "VOIP": 243
+  },
+  "classifier_task": "Traffic Category Classification (5-class)",
+  "classes": [
+    "C2",
+    "CHAT",
+    "FILE_TRANSFER",
+    "STREAMING",
+    "VOIP"
+  ],
+  "label_note": "Labels represent application traffic categories from VNAT dataset. VPN/non-VPN binary distinction is NOT available in this feature file; it requires the 32GB PCAP archive.",
+  "feature_names": [
+    "out_iat_min",
+    "out_iat_max",
+    "out_iat_mean",
+    "out_iat_std_dev",
+    "in_iat_min",
+    "in_iat_max",
+    "in_iat_mean",
+    "in_iat_std_dev",
+    "log_bytes_per_sec",
+    "log_total_outgoing_packets",
+    "log_total_incoming_packets"
+  ],
+  "n_features": 11,
+  "excluded_features": {
+    "log_total_outgoing_bytes": "Identical to log_total_outgoing_packets in all 15,093 rows (100.00% equality, Pearson r=1.0). Provides zero independent signal.",
+    "log_total_incoming_bytes": "Identical to log_total_incoming_packets in all 15,093 rows (100.00% equality, Pearson r=1.0). Provides zero independent signal.",
+    "flow_iat_min": "Definition mismatch: dataset uses chronological cross-direction consecutive-packet IATs; analyzer.py concatenates per-direction lists. flow_iat_min < min(out_iat_min, in_iat_min) in 71.7% of rows (10,824/15,093).",
+    "flow_iat_max": "Same mismatch as flow_iat_min (cross-direction vs per-direction IAT).",
+    "flow_iat_mean": "Same mismatch as flow_iat_min (cross-direction vs per-direction IAT).",
+    "flow_iat_std_dev": "Same mismatch as flow_iat_min (cross-direction vs per-direction IAT)."
+  },
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 500,
+  "max_features": "sqrt",
+  "class_weight": "balanced_subsample",
+  "oob_score": 0.9878,
+  "random_seed": 42,
+  "test_size": 0.2,
+  "accuracy": 0.9876,
+  "classification_report": {
+    "C2": {
+      "precision": 0.9819819819819819,
+      "recall": 0.9761194029850746,
+      "f1-score": 0.9790419161676647,
+      "support": 335.0
+    },
+    "CHAT": {
+      "precision": 0.9995126705653021,
+      "recall": 0.995147986414362,
+      "f1-score": 0.9973255531242402,
+      "support": 2061.0
+    },
+    "FILE_TRANSFER": {
+      "precision": 0.9575757575757575,
+      "recall": 0.9294117647058824,
+      "f1-score": 0.9432835820895522,
+      "support": 170.0
+    },
+    "STREAMING": {
+      "precision": 0.9396325459317585,
+      "recall": 0.9808219178082191,
+      "f1-score": 0.9597855227882037,
+      "support": 365.0
+    },
+    "VOIP": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 49.0
+    },
+    "accuracy": 0.9875838926174496,
+    "macro avg": {
+      "precision": 0.97574059121096,
+      "recall": 0.9763002143827076,
+      "f1-score": 0.9758873148339322,
+      "support": 2980.0
+    },
+    "weighted avg": {
+      "precision": 0.9878232671315513,
+      "recall": 0.9875838926174496,
+      "f1-score": 0.9876331985497131,
+      "support": 2980.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      327,
+      1,
+      1,
+      6,
+      0
+    ],
+    [
+      1,
+      2051,
+      2,
+      7,
+      0
+    ],
+    [
+      2,
+      0,
+      158,
+      10,
+      0
+    ],
+    [
+      3,
+      0,
+      4,
+      358,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      49
+    ]
+  ],
+  "feature_importances": {
+    "out_iat_max": 0.136962,
+    "out_iat_mean": 0.127988,
+    "in_iat_min": 0.120154,
+    "log_bytes_per_sec": 0.109735,
+    "out_iat_min": 0.1065,
+    "in_iat_mean": 0.089282,
+    "in_iat_max": 0.07777,
+    "log_total_outgoing_packets": 0.064725,
+    "log_total_incoming_packets": 0.061175,
+    "out_iat_std_dev": 0.058651,
+    "in_iat_std_dev": 0.047057
+  },
+  "training_date": "2026-10-26T23:43:11.035893",
+  "validation_scope_note": "These metrics reflect held-out test-set performance on deduplicated VNAT feature vectors ONLY. They are NOT real-world PCAP performance estimates. Pre-dedup: 15,093 rows. Exact duplicates removed: 197. Post-dedup: 14,896. Split: stratified 80/20, random_state=42. Session-grouped split was NOT possible (no flow IDs in feature file). Real-world PCAP accuracy may differ due to: heuristic direction inference on ESP-encrypted flows, high variance in short captures, and controlled lab vs production traffic differences. flow_iat_* features excluded due to confirmed training-inference mismatch. V2 is NOT claimed to be more accurate on real traffic than V1."
+}

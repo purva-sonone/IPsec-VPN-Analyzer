@@ -14,7 +14,20 @@ IMPORTANT — HONEST LIMITATIONS:
   - For short captures (< ~20 packets), inter-arrival-time features have
     high variance and predictions should be treated as indicative only.
 
-Model accuracy on held-out test set (20%, stratified): 98.74%
+Model versions:
+  v1 (default) — 17 features including flow_iat_* and byte columns.
+                 traffic_classifier.joblib
+  v2 (opt-in)  — 11 independently verified features; drops flow_iat_* (confirmed
+                 training-inference mismatch) and byte columns (100% identical to
+                 packet count columns in dataset). traffic_classifier_v2.joblib
+
+Select version via MODEL_VERSION environment variable (default: 'v1').
+V2 is NOT claimed to be more accurate on real traffic; it eliminates
+known redundant/mismatched features. Real-world accuracy depends on capture
+quality and is NOT guaranteed by held-out VNAT test-set metrics.
+
+V1 accuracy on held-out test set (20%, stratified): 98.74%
+V2 accuracy on held-out test set (20%, stratified, deduped): 98.76%
 Dataset: VNAT_Feature_Dataframe_release_1.h5
          https://archive.ll.mit.edu/datasets/vnat/
 """
@@ -25,16 +38,19 @@ import math
 
 logger = logging.getLogger(__name__)
 
-# ── Model path ────────────────────────────────────────────────────────────────
+# ── Model version selection (MODEL_VERSION env-var, default 'v1') ─────────────
+# Read once at import time; restart the server to change.
 
-_MODEL_PATH = os.path.join(
-    os.path.dirname(__file__),       # backend/core/
-    '..', 'models',
-    'traffic_classifier.joblib',
-)
-_MODEL_PATH = os.path.normpath(_MODEL_PATH)
+_MODEL_VERSION = os.environ.get('MODEL_VERSION', 'v1').strip().lower()
 
-# ── Feature column order (must match training exactly) ────────────────────────
+# ── Model paths ───────────────────────────────────────────────────────────────
+
+_MODELS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'models'))
+
+_MODEL_PATH    = os.path.join(_MODELS_DIR, 'traffic_classifier.joblib')
+_MODEL_PATH_V2 = os.path.join(_MODELS_DIR, 'traffic_classifier_v2.joblib')
+
+# ── Feature column order — V1 (must match train_classifier.py exactly) ────────
 
 _FEATURE_COLS = [
     'out_iat_min',   'out_iat_max',   'out_iat_mean',   'out_iat_std_dev',
@@ -45,33 +61,72 @@ _FEATURE_COLS = [
     'log_total_outgoing_bytes',   'log_total_incoming_bytes',
 ]
 
-# ── Lazy-loaded model (loaded once on first inference call) ───────────────────
+# ── Feature column order — V2 (must match train_classifier_v2.py exactly) ─────
+# Drops: flow_iat_* (confirmed training-inference mismatch in 71.7% of rows)
+#        log_total_outgoing_bytes, log_total_incoming_bytes
+#        (100% identical to packet count columns in VNAT dataset)
 
-_clf_cache = None
-_le_cache  = None
+_V2_FEATURE_COLS = [
+    'out_iat_min',   'out_iat_max',   'out_iat_mean',   'out_iat_std_dev',
+    'in_iat_min',    'in_iat_max',    'in_iat_mean',    'in_iat_std_dev',
+    'log_bytes_per_sec',
+    'log_total_outgoing_packets', 'log_total_incoming_packets',
+]
+
+# ── Per-version lazy caches (each version loads independently) ────────────────
+
+_clf_cache    = None   # V1
+_le_cache     = None   # V1
+_v2_clf_cache = None   # V2
+_v2_le_cache  = None   # V2
 
 
-def _load_model():
-    """Load the trained model from disk. Returns (clf, label_encoder) or (None, None)."""
-    global _clf_cache, _le_cache
+def _load_model(version: str = 'v1'):
+    """
+    Load the trained model for the requested version.
+    Returns (clf, label_encoder) or (None, None) on any failure.
 
-    if _clf_cache is not None:
-        return _clf_cache, _le_cache
+    version='v1' loads traffic_classifier.joblib
+    version='v2' loads traffic_classifier_v2.joblib
 
-    if not os.path.exists(_MODEL_PATH):
-        logger.info("No trained model found at %s", _MODEL_PATH)
-        return None, None
+    IMPORTANT: V2 failure does NOT fall back to V1.
+    Each version loads and fails independently.
+    """
+    global _clf_cache, _le_cache, _v2_clf_cache, _v2_le_cache
 
-    try:
-        import joblib
-        bundle = joblib.load(_MODEL_PATH)
-        _clf_cache = bundle['model']
-        _le_cache  = bundle['label_encoder']
-        logger.info("Loaded traffic classifier from %s", _MODEL_PATH)
-        return _clf_cache, _le_cache
-    except Exception as e:
-        logger.warning("Failed to load model from %s: %s", _MODEL_PATH, e)
-        return None, None
+    if version == 'v2':
+        if _v2_clf_cache is not None:
+            return _v2_clf_cache, _v2_le_cache
+        if not os.path.exists(_MODEL_PATH_V2):
+            logger.info("No V2 model found at %s", _MODEL_PATH_V2)
+            return None, None
+        try:
+            import joblib
+            bundle = joblib.load(_MODEL_PATH_V2)
+            _v2_clf_cache = bundle['model']
+            _v2_le_cache  = bundle['label_encoder']
+            logger.info("Loaded V2 traffic classifier from %s", _MODEL_PATH_V2)
+            return _v2_clf_cache, _v2_le_cache
+        except Exception as e:
+            logger.warning("Failed to load V2 model from %s: %s", _MODEL_PATH_V2, e)
+            return None, None
+    else:
+        # V1 (default)
+        if _clf_cache is not None:
+            return _clf_cache, _le_cache
+        if not os.path.exists(_MODEL_PATH):
+            logger.info("No trained model found at %s", _MODEL_PATH)
+            return None, None
+        try:
+            import joblib
+            bundle = joblib.load(_MODEL_PATH)
+            _clf_cache = bundle['model']
+            _le_cache  = bundle['label_encoder']
+            logger.info("Loaded traffic classifier from %s", _MODEL_PATH)
+            return _clf_cache, _le_cache
+        except Exception as e:
+            logger.warning("Failed to load model from %s: %s", _MODEL_PATH, e)
+            return None, None
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
@@ -122,8 +177,18 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             ),
         }
 
+    # ── Select feature schema and model based on MODEL_VERSION ──────────────
+    _active_version  = _MODEL_VERSION   # module-level constant, set at import
+    _active_features = _V2_FEATURE_COLS if _active_version == 'v2' else _FEATURE_COLS
+    _model_file_name = ('traffic_classifier_v2.joblib'
+                        if _active_version == 'v2'
+                        else 'traffic_classifier.joblib')
+    _retrain_script  = ('backend/models/train_classifier_v2.py'
+                        if _active_version == 'v2'
+                        else 'backend/models/train_classifier.py')
+
     # ── Try to load the trained model ──────────────────────────────────────
-    clf, le = _load_model()
+    clf, le = _load_model(_active_version)
 
     if clf is None:
         return {
@@ -131,12 +196,13 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "confidence_score": None,
             "model_status": "model_unavailable",
             "model_note": (
-                "No trained classifier found. The model file "
-                f"(traffic_classifier.joblib) was not found at the expected "
-                "path. Re-run backend/models/train_classifier.py to train."
+                f"No trained classifier found (MODEL_VERSION={_active_version}). "
+                f"The model file ({_model_file_name}) was not found at the "
+                f"expected path. Re-run {_retrain_script} to train."
             ),
             "features_available": available_features,
-            "features_required_missing": _FEATURE_COLS,
+            "features_required_missing": _active_features,
+            "model_version": _active_version,
         }
 
     # ── Check if flow features were extracted ──────────────────────────────
@@ -150,11 +216,12 @@ def predict_traffic_category(pcap_results: dict) -> dict:
                 "This may occur if the capture has no valid packet timestamps."
             ),
             "features_available": available_features,
-            "features_required_missing": _FEATURE_COLS,
+            "features_required_missing": _active_features,
+            "model_version": _active_version,
         }
 
     # ── Build feature vector ───────────────────────────────────────────────
-    missing_features = [f for f in _FEATURE_COLS if f not in flow_features]
+    missing_features = [f for f in _active_features if f not in flow_features]
     if missing_features:
         return {
             "predicted_category": "Unknown",
@@ -166,13 +233,14 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             ),
             "features_available": available_features,
             "features_required_missing": missing_features,
+            "model_version": _active_version,
         }
 
     # ── Validate feature values (no NaN/Inf) ──────────────────────────────
     import math
     feature_vector = []
     bad_features = []
-    for col in _FEATURE_COLS:
+    for col in _active_features:
         val = flow_features[col]
         if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
             bad_features.append(col)
@@ -191,7 +259,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         pred_proba = clf.predict_proba(X)[0]
 
         predicted_label      = le.inverse_transform([pred_enc])[0]
-        confidence_score     = round(float(pred_proba.max()), 4)
+        confidence_score     = round(float(np.max(pred_proba)), 4)
         all_class_proba      = {
             cls: round(float(p), 4)
             for cls, p in zip(le.classes_, pred_proba)
@@ -206,6 +274,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "model_note": f"Classifier inference failed: {e}",
             "features_available": available_features,
             "features_required_missing": [],
+            "model_version": _active_version,
         }
 
     # ── Add feature availability summary for the UI ────────────────────────
@@ -232,6 +301,12 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "treat this prediction as indicative only."
         )
 
+    _accuracy_note = (
+        "98.76% (held-out VNAT test split, deduped, 11 features)"
+        if _active_version == 'v2'
+        else "98.74% (held-out VNAT test split, 17 features)"
+    )
+
     return {
         "predicted_category": predicted_label,
         "confidence_score": confidence_score,
@@ -240,9 +315,11 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         "features_available": available_features,
         "features_required_missing": [],
         "all_class_probabilities": all_class_proba,
+        "model_version": _active_version,
         "dataset_note": (
-            "Model: RandomForestClassifier (500 trees), "
-            "trained on VNAT Feature Dataframe (15,093 samples), "
-            "test accuracy 98.74%."
+            f"Model: RandomForestClassifier (500 trees, {_active_version.upper()}), "
+            "trained on VNAT Feature Dataframe (MIT Lincoln Laboratory). "
+            f"VNAT test-set accuracy: {_accuracy_note}. "
+            "Note: held-out VNAT accuracy does not guarantee real-world PCAP accuracy."
         ),
     }
