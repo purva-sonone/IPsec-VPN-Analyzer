@@ -358,7 +358,7 @@ def generate_pdf(report: dict) -> bytes:
                 Paragraph(f.get("evidence", ""), S["small"]),
                 Paragraph(f.get("recommendation", ""), S["small"]),
             ])
-        t = Table(f_data, colWidths=[2.5*cm, 4*cm, 5.5*cm, 5*cm], repeatRows=1)
+        t = Table(f_data, colWidths=[2.3*cm, 4.7*cm, 5.0*cm, 5.0*cm], repeatRows=1)
         sty = [
             ("BACKGROUND",  (0, 0), (-1, 0),  NAVY),
             ("TEXTCOLOR",   (0, 0), (-1, 0),  WHITE),

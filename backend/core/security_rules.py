@@ -227,7 +227,7 @@ def evaluate_security(pcap_results: dict) -> dict:
         else:
             status = "PASS"
             findings.append({
-                "title": "Certificate/Signature-Based Authentication",
+                "title": "Certificate-Based Authentication",
                 "description": f"The observed authentication method '{auth}' uses asymmetric cryptography.",
                 "severity": "Informational",
                 "recommendation": "Ensure certificate chain validity and key lengths meet your policy.",

@@ -62,7 +62,7 @@
         "risk_contribution": 3
       },
       {
-        "title": "Certificate/Signature-Based Authentication",
+        "title": "Certificate-Based Authentication",
         "description": "The observed authentication method 'RSA Signatures' uses asymmetric cryptography.",
         "severity": "Informational",
         "recommendation": "Ensure certificate chain validity and key lengths meet your policy.",

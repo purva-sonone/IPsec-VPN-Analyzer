@@ -87,5 +87,15 @@ class TestSecurityRules(unittest.TestCase):
             "Migrate to IKEv2, which is more modern and secure and supports stronger authentication options such as EAP and certificates."
         )
 
+    def test_certificate_based_authentication_title(self):
+        pcap_results = {
+            "authentication": "RSA Digital Signature",
+        }
+        res = evaluate_security(pcap_results)
+        finding = next((f for f in res["findings"] if f["title"] == "Certificate-Based Authentication"), None)
+        self.assertIsNotNone(finding)
+        self.assertEqual(finding["severity"], "Informational")
+        self.assertNotIn("Certificate/Signature-Based", [f["title"] for f in res["findings"]])
+
 if __name__ == '__main__':
     unittest.main()
