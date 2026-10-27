@@ -9,6 +9,11 @@ import math
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    from core.beaconing_detector import analyze_beaconing
+except ImportError:
+    from beaconing_detector import analyze_beaconing
+
 logger = logging.getLogger(__name__)
 
 # Thread pool for running PyShark in isolation from Uvicorn's event loop
@@ -680,6 +685,25 @@ def _run_pyshark_sync(file_path: str) -> dict:
                 }
                 for label, low, high in bin_defs
             ]
+
+        # ── Compute C2 Beaconing & Timing Anomaly Analysis ────────────────
+        try:
+            results["beaconing_analysis"] = analyze_beaconing(
+                _pkt_timestamps,
+                _pkt_sizes,
+                results.get("protocols_found", [])
+            )
+        except Exception as b_err:
+            logger.warning("Beaconing analysis failed: %s", b_err)
+            results["beaconing_analysis"] = {
+                "status": "error",
+                "anomaly_score": 0.0,
+                "anomaly_level": "LOW",
+                "beacon_detected": False,
+                "verdict": "Timing analysis unavailable",
+                "explanation": str(b_err),
+                "insights": [],
+            }
 
         # ── TShark subprocess fallback ────────────────────────────────────
         # If PyShark did not extract any crypto parameters, try TShark -T fields

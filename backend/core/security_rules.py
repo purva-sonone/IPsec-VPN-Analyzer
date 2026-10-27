@@ -291,7 +291,68 @@ def evaluate_security(pcap_results: dict) -> dict:
             "reason": "Neither IKE nor ESP protocols were identified in the analyzed packets.",
         })
 
-    # ── 6. Determine overall risk level ──────────────────────────────────────
+    # ── 6. C2 Beaconing & Timing Anomaly ──────────────────────────────────────
+    beaconing = pcap_results.get("beaconing_analysis")
+    if beaconing and beaconing.get("status") == "evaluated":
+        anomaly_score = beaconing.get("anomaly_score", 0.0)
+        is_beacon = beaconing.get("beacon_detected", False)
+        interval = beaconing.get("estimated_interval_sec") or 0.0
+        jitter = beaconing.get("jitter_sec") or 0.0
+        regularity = beaconing.get("timing_regularity_pct", 0.0)
+
+        if is_beacon or anomaly_score >= 68.0:
+            findings.append({
+                "title": "Periodic Beaconing Activity Detected",
+                "description": (
+                    f"Traffic exhibits strict periodic timing regularity ({regularity}%) with estimated "
+                    f"beacon interval of ~{interval:.2f}s (Jitter: ±{jitter:.2f}s). "
+                    "This behavior strongly correlates with automated Command & Control (C2) heartbeats "
+                    "or persistent implant callbacks over the encrypted VPN tunnel."
+                ),
+                "severity": "High",
+                "recommendation": (
+                    "Investigate endpoints generating regular heartbeat traffic. "
+                    "Correlate destination IPs with threat intelligence feeds and inspect endpoint processes."
+                ),
+                "evidence": f"Beaconing Anomaly Score: {anomaly_score}/100. Observed Interval: ~{interval:.2f}s.",
+                "risk_contribution": 3,
+            })
+            risk_score += 3
+            rules_evaluated.append({
+                "rule": "C2 Beaconing Analysis",
+                "observed_value": f"Periodic Beaconing ({anomaly_score}/100)",
+                "status": "FAIL",
+            })
+        elif anomaly_score >= 40.0:
+            findings.append({
+                "title": "Semi-Periodic Automated Traffic Observed",
+                "description": (
+                    f"Moderate timing regularity observed ({regularity}%, interval ~{interval:.2f}s). "
+                    "May correspond to routine background synchronization, NTP/DNS keep-alives, or jittered beaconing."
+                ),
+                "severity": "Informational",
+                "recommendation": "Review endpoint scheduled tasks to confirm whether periodic sync is authorized.",
+                "evidence": f"Timing Anomaly Score: {anomaly_score}/100.",
+                "risk_contribution": 0,
+            })
+            rules_evaluated.append({
+                "rule": "C2 Beaconing Analysis",
+                "observed_value": f"Semi-Periodic ({anomaly_score}/100)",
+                "status": "REVIEW",
+            })
+        else:
+            rules_evaluated.append({
+                "rule": "C2 Beaconing Analysis",
+                "observed_value": f"Aperiodic / Normal ({anomaly_score}/100)",
+                "status": "PASS",
+            })
+    elif beaconing and beaconing.get("status") == "insufficient_data":
+        rules_skipped.append({
+            "rule": "C2 Beaconing Analysis",
+            "reason": beaconing.get("explanation", "Insufficient packet timestamps to evaluate timing regularity."),
+        })
+
+    # ── 7. Determine overall risk level ──────────────────────────────────────
     if risk_score >= 5:
         risk_level = "High"
     elif risk_score >= 3:

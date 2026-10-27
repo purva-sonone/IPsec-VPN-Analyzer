@@ -4,7 +4,7 @@ import {
   ArrowLeft, Download, Shield, Activity, Lock, Key, Wifi,
   AlertTriangle, CheckCircle, XCircle, Info, Cpu, FlaskConical,
   SkipForward, ListChecks, AlertCircle, Layers, RefreshCw,
-  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch
+  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch, Radio
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer
@@ -407,7 +407,7 @@ function MLProbaTooltip({ active, payload }) {
   );
 }
 
-function MLSection({ ml, distribution, stats }) {
+function MLSection({ ml, distribution, stats, beaconing }) {
   if (!ml) return null;
   const { model_status, model_note, predicted_category, confidence_score,
           all_class_probabilities, dataset_note } = ml;
@@ -608,6 +608,133 @@ function MLSection({ ml, distribution, stats }) {
           </span>
         </div>
         <PacketSizeDistribution distribution={distribution} stats={stats} />
+      </div>
+
+      {/* ── C2 Beaconing & Timing Anomaly Analysis ── */}
+      <BeaconingAnalysisCard beaconing={beaconing} />
+    </div>
+  );
+}
+
+// ── Beaconing & Anomaly Analysis Card ───────────────────────────────────────
+function BeaconingAnalysisCard({ beaconing }) {
+  if (!beaconing || beaconing.status === 'insufficient_data') {
+    return (
+      <div style={{
+        marginTop: '1rem',
+        padding: '0.875rem 1rem',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 10,
+        border: '1px solid #E2E8F0',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <Radio style={{ width: 14, height: 14, color: '#64748B' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            C2 Beaconing & Timing Anomaly Analysis
+          </span>
+        </div>
+        <p style={{ fontSize: 11, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+          {beaconing?.explanation || 'Insufficient packets to evaluate inter-arrival timing regularity.'}
+        </p>
+      </div>
+    );
+  }
+
+  const score = beaconing.anomaly_score ?? 0;
+  const isHigh = score >= 68 || beaconing.beacon_detected;
+  const isMed = score >= 40 && score < 68;
+
+  const badge = isHigh
+    ? { bg: '#FEF2F2', border: '#FECACA', text: '#DC2626', label: 'HIGH RISK C2 BEACON' }
+    : isMed
+    ? { bg: '#FFFBEB', border: '#FDE68A', text: '#D97706', label: 'SEMI-PERIODIC / MODERATE' }
+    : { bg: '#F0FDF4', border: '#BBF7D0', text: '#16A34A', label: 'NORMAL / APERIODIC' };
+
+  return (
+    <div style={{
+      marginTop: '1rem',
+      padding: '1.25rem',
+      borderRadius: 12,
+      border: `1px solid ${isHigh ? '#FECACA' : '#E2E8F0'}`,
+      backgroundColor: isHigh ? '#FFF5F5' : '#FFFFFF',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8,
+            backgroundColor: isHigh ? '#FEE2E2' : '#EFF6FF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Radio style={{ width: 16, height: 16, color: isHigh ? '#DC2626' : '#2563EB' }} />
+          </div>
+          <div>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>
+              C2 Beaconing & Timing Anomaly Analysis
+            </h4>
+            <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>
+              Forensic inter-arrival time (IAT) regularity & automated heartbeat detection
+            </p>
+          </div>
+        </div>
+
+        <span style={{
+          fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+          backgroundColor: badge.bg, border: `1px solid ${badge.border}`, color: badge.text
+        }}>
+          {badge.label}
+        </span>
+      </div>
+
+      {/* Main Score & Metrics Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Anomaly Score</span>
+          <div style={{ fontSize: 24, fontWeight: 800, color: badge.text, marginTop: 2 }}>
+            {score}<span style={{ fontSize: 12, fontWeight: 500, color: '#94A3B8' }}>/100</span>
+          </div>
+        </div>
+
+        <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Timing Regularity</span>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
+            {beaconing.timing_regularity_pct}%
+          </div>
+        </div>
+
+        <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Estimated Interval</span>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginTop: 6 }}>
+            {beaconing.estimated_interval_sec != null ? `~${beaconing.estimated_interval_sec}s` : 'N/A'}
+          </div>
+          {beaconing.jitter_sec != null && (
+            <span style={{ fontSize: 10, color: '#64748B' }}>±{beaconing.jitter_sec}s jitter</span>
+          )}
+        </div>
+
+        <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Jitter Index (CV)</span>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
+            {beaconing.coefficient_of_variation ?? '—'}
+          </div>
+        </div>
+      </div>
+
+      {/* Forensic Verdict & Insights */}
+      <div style={{
+        padding: '0.75rem 1rem',
+        borderRadius: 8,
+        backgroundColor: isHigh ? '#FEF2F2' : '#F1F5F9',
+        borderLeft: `3px solid ${isHigh ? '#DC2626' : '#64748B'}`
+      }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: isHigh ? '#991B1B' : '#0F172A', margin: '0 0 4px 0' }}>
+          {beaconing.verdict}
+        </p>
+        <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+          {beaconing.insights?.map((ins, idx) => (
+            <li key={idx}>{ins}</li>
+          ))}
+        </ul>
       </div>
     </div>
   );
@@ -1037,6 +1164,7 @@ export default function AnalysisDetail() {
           ml={ml}
           distribution={m?.packet_size_distribution}
           stats={m?.packet_size_stats}
+          beaconing={m?.beaconing_analysis}
         />
       </div>
 

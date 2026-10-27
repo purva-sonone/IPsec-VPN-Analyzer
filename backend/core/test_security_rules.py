@@ -97,5 +97,51 @@ class TestSecurityRules(unittest.TestCase):
         self.assertEqual(finding["severity"], "Informational")
         self.assertNotIn("Certificate/Signature-Based", [f["title"] for f in res["findings"]])
 
+    def test_beaconing_high_anomaly_fails(self):
+        pcap_results = {
+            "beaconing_analysis": {
+                "status": "evaluated",
+                "anomaly_score": 82.5,
+                "beacon_detected": True,
+                "estimated_interval_sec": 5.0,
+                "jitter_sec": 0.05,
+                "timing_regularity_pct": 92.0,
+            }
+        }
+        res = evaluate_security(pcap_results)
+        self.assertGreaterEqual(res["overall_risk_score"], 3)
+        self.assertTrue(any(f["title"] == "Periodic Beaconing Activity Detected" for f in res["findings"]))
+        b_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "C2 Beaconing Analysis"), None)
+        self.assertIsNotNone(b_rule)
+        self.assertEqual(b_rule["status"], "FAIL")
+
+    def test_beaconing_normal_passes(self):
+        pcap_results = {
+            "beaconing_analysis": {
+                "status": "evaluated",
+                "anomaly_score": 18.0,
+                "beacon_detected": False,
+                "estimated_interval_sec": 0.4,
+                "jitter_sec": 1.2,
+                "timing_regularity_pct": 20.0,
+            }
+        }
+        res = evaluate_security(pcap_results)
+        self.assertEqual(res["overall_risk_score"], 0)
+        self.assertFalse(any(f["title"] == "Periodic Beaconing Activity Detected" for f in res["findings"]))
+        b_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "C2 Beaconing Analysis"), None)
+        self.assertIsNotNone(b_rule)
+        self.assertEqual(b_rule["status"], "PASS")
+
+    def test_beaconing_insufficient_skipped(self):
+        pcap_results = {
+            "beaconing_analysis": {
+                "status": "insufficient_data",
+                "explanation": "At least 5 packets required."
+            }
+        }
+        res = evaluate_security(pcap_results)
+        self.assertTrue(any(r["rule"] == "C2 Beaconing Analysis" for r in res["rules_skipped"]))
+
 if __name__ == '__main__':
     unittest.main()

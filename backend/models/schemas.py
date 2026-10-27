@@ -14,6 +14,7 @@ class PcapMetrics(BaseModel):
     packet_size_distribution: Optional[List[dict]] = None
     packet_size_stats: Optional[dict] = None
     packets: Optional[List[dict]] = None
+    beaconing_analysis: Optional[dict] = None
 
 
 class SecurityFinding(BaseModel):

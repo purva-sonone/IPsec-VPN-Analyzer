@@ -429,6 +429,22 @@ def generate_pdf(report: dict) -> bytes:
 
     story.append(Spacer(1, 0.3*cm))
 
+    # ── Behavioral Timing & Beaconing Analysis ────────────────────────────────
+    ba = m.get("beaconing_analysis")
+    if ba and ba.get("status") == "evaluated":
+        story.append(Paragraph("Behavioral Timing & Beaconing Analysis", S["h2"]))
+        b_interval = f"{ba.get('estimated_interval_sec')}s" if ba.get('estimated_interval_sec') else "N/A"
+        b_jitter = f"±{ba.get('jitter_sec')}s" if ba.get('jitter_sec') else "N/A"
+        b_data = [
+            ["Metric", "Observed Value"],
+            ["Beaconing Anomaly Score", f"{ba.get('anomaly_score', 0)}/100 ({ba.get('anomaly_level', 'LOW')})"],
+            ["Timing Regularity", f"{ba.get('timing_regularity_pct', 0)}%"],
+            ["Estimated Periodicity", f"{b_interval} (Jitter: {b_jitter})"],
+            ["Forensic Verdict", Paragraph(ba.get("verdict", "—"), S["body"])],
+        ]
+        story.append(_table(b_data, [6*cm, 11*cm]))
+        story.append(Spacer(1, 0.3*cm))
+
     # ── Features used ─────────────────────────────────────────────────────────
     fa = ml.get("features_available", [])
     if fa and ml_status == "trained_model":
