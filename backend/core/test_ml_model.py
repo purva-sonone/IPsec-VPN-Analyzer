@@ -1,4 +1,4 @@
-﻿"""
+"""
 test_ml_model.py - Unit tests for ml_model.py (V1 and V2 inference paths)
 
 Covers:
@@ -272,6 +272,7 @@ class TestNoEspNotApplicable(unittest.TestCase):
         self.assertEqual(result['model_status'], 'not_applicable')
         self.assertEqual(result['predicted_category'], 'Not Applicable')
         self.assertIsNone(result['confidence_score'])
+        self.assertIsNone(result.get('model_version'))
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +368,31 @@ class TestV1UnaffectedByMissingV2Metadata(unittest.TestCase):
         self.assertEqual(result_with['model_status'], result_without['model_status'])
         self.assertEqual(result_with.get('model_version'), 'v1')
         self.assertEqual(result_without.get('model_version'), 'v1')
+
+
+# ---------------------------------------------------------------------------
+# TC-19  Invalid runtime MODEL_VERSION safely normalizes to v1
+# ---------------------------------------------------------------------------
+
+class TestInvalidRuntimeModelVersion(unittest.TestCase):
+    def test_invalid_runtime_version_normalizes_to_v1(self):
+        """Unrecognized MODEL_VERSION (e.g. 'v99') safely normalizes to v1 and agrees with v1 schema."""
+        pcap_results = _esp_pcap_results(_full_v1_features())
+        mock_clf = MagicMock()
+        mock_clf.predict.return_value = [1]
+        mock_clf.predict_proba.return_value = [[0.05, 0.9, 0.03, 0.01, 0.01]]
+        mock_le  = MagicMock()
+        mock_le.inverse_transform.return_value = ['CHAT']
+        mock_le.classes_ = ['C2', 'CHAT', 'FILE_TRANSFER', 'STREAMING', 'VOIP']
+
+        with patch.dict(os.environ, {'MODEL_VERSION': 'v99'}):
+            with patch.object(ml, '_load_model', return_value=(mock_clf, mock_le)) as mock_load:
+                result = ml.predict_traffic_category(pcap_results)
+
+        # Confirm normalized to v1 and did not claim v99
+        self.assertEqual(result.get('model_version'), 'v1')
+        mock_load.assert_called_with('v1')
+        self.assertIn('V1', result.get('dataset_note', ''))
 
 
 # ---------------------------------------------------------------------------

@@ -105,6 +105,72 @@ def _on_page(canvas, doc):
     canvas.restoreState()
 
 
+def _resolve_model_metadata(ml: dict) -> dict:
+    """
+    Resolve model version, architecture display, and validation scope from the prediction result.
+
+    Adheres to strict validation principles:
+      - Explicit model_version ('v1' or 'v2') is the sole authoritative source.
+        Conflicting dataset_note text never overrides an explicit model_version.
+      - V1: 17 features, 98.74% held-out VNAT test-set accuracy.
+      - V2: 11 verified features, 98.76% held-out VNAT test-set accuracy.
+      - Figures are clearly labeled as held-out VNAT test-set accuracy, NOT real-world PCAP accuracy.
+      - If model_version is missing or unknown, exact verified legacy signatures are checked.
+        Arbitrary or unverified text safely falls back to unknown and is NEVER labeled as V2.
+    """
+    raw_version = str(ml.get("model_version") or "").strip().lower()
+    dataset_note = str(ml.get("dataset_note") or "").strip()
+
+    # 1. Authoritative explicit version check
+    if raw_version == "v2":
+        return {
+            "version": "v2",
+            "version_display": "V2 (11 verified features)",
+            "model_name": "RandomForestClassifier (500 trees, V2)",
+            "accuracy_display": "98.76% (held-out VNAT test-set accuracy; not real-world PCAP accuracy)",
+            "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
+        }
+    elif raw_version == "v1":
+        return {
+            "version": "v1",
+            "version_display": "V1 (17 features)",
+            "model_name": "RandomForestClassifier (500 trees, V1)",
+            "accuracy_display": "98.74% (held-out VNAT test-set accuracy; not real-world PCAP accuracy)",
+            "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
+        }
+
+    # 2. Legacy fallback for historical database records lacking model_version field.
+    # Only exact verified legacy signatures from database inspection are recognized.
+    _VERIFIED_LEGACY_V1_500 = "Model: RandomForestClassifier (500 trees), trained on VNAT Feature Dataframe (15,093 samples), test accuracy 98.74%."
+    _VERIFIED_LEGACY_V1_200 = "Model: RandomForestClassifier (200 trees), trained on VNAT Feature Dataframe (15,093 samples), test accuracy 98.48%."
+
+    if not raw_version and dataset_note == _VERIFIED_LEGACY_V1_500:
+        return {
+            "version": "v1",
+            "version_display": "V1 (17 features, legacy record)",
+            "model_name": "RandomForestClassifier (500 trees, legacy V1)",
+            "accuracy_display": "98.74% (held-out VNAT test-set accuracy; not real-world PCAP accuracy)",
+            "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
+        }
+    elif not raw_version and dataset_note == _VERIFIED_LEGACY_V1_200:
+        return {
+            "version": "v1",
+            "version_display": "V1 (17 features, legacy record)",
+            "model_name": "RandomForestClassifier (200 trees, legacy V1)",
+            "accuracy_display": "98.48% (held-out VNAT test-set accuracy; not real-world PCAP accuracy)",
+            "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
+        }
+
+    # 3. Safe fallback for missing, unknown, or unverified metadata (never guess V2)
+    return {
+        "version": "unknown",
+        "version_display": "Unknown / Unspecified Version",
+        "model_name": "RandomForestClassifier (unspecified)",
+        "accuracy_display": "Held-out VNAT test-set accuracy unavailable (model version unspecified)",
+        "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
+    }
+
+
 def generate_pdf(report: dict) -> bytes:
     """Return PDF bytes for the given analysis report dict."""
     buf = io.BytesIO()
@@ -300,13 +366,15 @@ def generate_pdf(report: dict) -> bytes:
     elif ml_status == "trained_model":
         conf = ml.get("confidence_score")
         conf_str = f"{conf*100:.1f}%" if conf is not None else "N/A"
+        meta = _resolve_model_metadata(ml)
         ml_data = [
-            ["Field",           "Value"],
-            ["Predicted Category", ml.get("predicted_category","—")],
-            ["Confidence",      conf_str],
-            ["Model",           "RandomForestClassifier (500 trees)"],
-            ["Training Dataset","VNAT Feature Dataframe (MIT Lincoln Laboratory)"],
-            ["Test Accuracy",   "98.74%"],
+            ["Field",                   "Value"],
+            ["Predicted Category",      ml.get("predicted_category", "—")],
+            ["Confidence",              conf_str],
+            ["Model Version",           meta["version_display"]],
+            ["Model",                   meta["model_name"]],
+            ["Training Dataset",        meta["dataset"]],
+            ["Held-Out Test Accuracy",  Paragraph(meta["accuracy_display"], S["body"])],
         ]
         story.append(_table(ml_data, [6*cm, 11*cm]))
 

@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # ── Model version selection (MODEL_VERSION env-var, default 'v1') ─────────────
 # Read once at import time; restart the server to change.
 
-_MODEL_VERSION = os.environ.get('MODEL_VERSION', 'v1').strip().lower()
+_raw_model_ver = os.environ.get('MODEL_VERSION', 'v1').strip().lower()
+_MODEL_VERSION = _raw_model_ver if _raw_model_ver in ('v1', 'v2') else 'v1'
 
 # ── Model paths ───────────────────────────────────────────────────────────────
 
@@ -91,10 +92,15 @@ def _load_model(version: str = 'v1'):
 
     IMPORTANT: V2 failure does NOT fall back to V1.
     Each version loads and fails independently.
+    Invalid version strings safely normalize to 'v1'.
     """
     global _clf_cache, _le_cache, _v2_clf_cache, _v2_le_cache
+    norm_ver = (version or 'v1').strip().lower()
+    if norm_ver not in ('v1', 'v2'):
+        logger.warning("Unrecognized model version '%s' requested; normalizing to 'v1'", version)
+        norm_ver = 'v1'
 
-    if version == 'v2':
+    if norm_ver == 'v2':
         if _v2_clf_cache is not None:
             return _v2_clf_cache, _v2_le_cache
         if not os.path.exists(_MODEL_PATH_V2):
@@ -171,6 +177,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             ),
             "features_available": available_features,
             "features_required_missing": [],
+            "model_version": None,
             "dataset_note": (
                 "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). "
                 "Predicts traffic category: C2, CHAT, FILE_TRANSFER, STREAMING, VOIP."
@@ -178,7 +185,12 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         }
 
     # ── Select feature schema and model based on MODEL_VERSION ──────────────
-    _active_version  = _MODEL_VERSION   # module-level constant, set at import
+    raw_env_ver = os.environ.get('MODEL_VERSION', _MODEL_VERSION).strip().lower()
+    if raw_env_ver in ('v1', 'v2'):
+        _active_version = raw_env_ver
+    else:
+        logger.warning("Invalid MODEL_VERSION '%s'; safely normalizing to 'v1'", raw_env_ver)
+        _active_version = 'v1'
     _active_features = _V2_FEATURE_COLS if _active_version == 'v2' else _FEATURE_COLS
     _model_file_name = ('traffic_classifier_v2.joblib'
                         if _active_version == 'v2'
