@@ -65,7 +65,7 @@ def evaluate_security(pcap_results: dict) -> dict:
                     "susceptibility to aggressive-mode dictionary attacks and weaker PFS guarantees."
                 ),
                 "severity": "Medium",
-                "recommendation": "Migrate to IKEv2, which provides stronger security guarantees and mandatory EAP support.",
+                "recommendation": "Migrate to IKEv2, which is more modern and secure and supports stronger authentication options such as EAP and certificates.",
                 "evidence": f"Observed exchange type indicates {ike_ver}.",
                 "risk_contribution": 2,
             })

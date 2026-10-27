@@ -74,5 +74,18 @@ class TestSecurityRules(unittest.TestCase):
         self.assertEqual(esp_rule["status"], "NOT OBSERVED")
         self.assertEqual(esp_rule["observed_value"], "No ESP Packets Observed")
 
+    def test_ikev1_recommendation_wording(self):
+        pcap_results = {
+            "ike_version": "IKEv1",
+        }
+        res = evaluate_security(pcap_results)
+        finding = next((f for f in res["findings"] if f["title"] == "IKEv1 Detected"), None)
+        self.assertIsNotNone(finding)
+        self.assertNotIn("mandatory EAP", finding["recommendation"])
+        self.assertEqual(
+            finding["recommendation"],
+            "Migrate to IKEv2, which is more modern and secure and supports stronger authentication options such as EAP and certificates."
+        )
+
 if __name__ == '__main__':
     unittest.main()
