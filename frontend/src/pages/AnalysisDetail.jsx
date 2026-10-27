@@ -375,7 +375,16 @@ function PacketSizeDistribution({ distribution = [], stats = {} }) {
 }
 
 // ── ML Section ─────────────────────────────────────────────────────────────
-const ML_COLORS = { C2: '#DC2626', CHAT: '#2563EB', FILE_TRANSFER: '#16A34A', STREAMING: '#D97706', VOIP: '#7C3AED' };
+const ML_COLORS = {
+  C2: '#DC2626',
+  CHAT: '#2563EB',
+  FILE_TRANSFER: '#16A34A',
+  STREAMING: '#D97706',
+  VOIP: '#7C3AED',
+  'Inconclusive (Short Capture)': '#64748B',
+  'Unclassified / Mixed Flow': '#64748B',
+  'Unknown': '#64748B',
+};
 
 // Confidence thresholds — defined once, clearly, here.
 // LOW_CONF_THRESHOLD : predictions below this percentage are flagged as low-confidence

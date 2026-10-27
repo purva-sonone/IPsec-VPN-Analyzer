@@ -299,20 +299,34 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         f"Bytes/sec (log): {flow_features.get('log_bytes_per_sec', 0):.2f}",
     ]
 
-    # ── Low-confidence warning ─────────────────────────────────────────────
-    # Short captures produce unreliable IAT statistics; warn accordingly
-    is_short_capture = packet_count < 50
-    model_note = (
-        "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). "
-        f"Predicted category: {predicted_label} with {confidence_score*100:.1f}% confidence. "
-        "Note: This predicts traffic TYPE (C2/Chat/Streaming/etc.), not VPN vs non-VPN. "
-        "VPN/non-VPN binary detection requires the 32 GB PCAP archive not downloaded here."
-    )
-    if is_short_capture:
-        model_note += (
-            f" CAUTION: Only {packet_count} packets captured. "
-            "IAT-based features have high variance in short captures; "
-            "treat this prediction as indicative only."
+    # ── Reliability & False Positive Prevention Guards ─────────────────────
+    # Thresholds:
+    # 1. Minimum packet count: < 30 packets is insufficient for stable IAT distribution
+    # 2. Confidence threshold: < 65% is too ambiguous to claim a definitive category
+    MIN_PACKETS_THRESHOLD = 30
+    MIN_CONFIDENCE_THRESHOLD = 0.65
+
+    if packet_count < MIN_PACKETS_THRESHOLD:
+        predicted_category = "Inconclusive (Short Capture)"
+        model_note = (
+            f"Capture contains only {packet_count} packet(s). "
+            f"Statistical inter-arrival timing (IAT) requires at least {MIN_PACKETS_THRESHOLD} packets "
+            f"for reliable traffic categorization. Raw statistical inclination ({predicted_label}, "
+            f"{confidence_score*100:.1f}%) withheld to prevent false alarms."
+        )
+    elif confidence_score < MIN_CONFIDENCE_THRESHOLD:
+        predicted_category = "Unclassified / Mixed Flow"
+        model_note = (
+            f"Classifier confidence ({confidence_score*100:.1f}%) is below the {MIN_CONFIDENCE_THRESHOLD*100:.0f}% "
+            f"reliability threshold. Traffic pattern exhibits mixed characteristics and does not conclusively "
+            f"match a single VNAT category (highest statistical tendency: {predicted_label})."
+        )
+    else:
+        predicted_category = predicted_label
+        model_note = (
+            "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). "
+            f"Predicted category: {predicted_category} with {confidence_score*100:.1f}% confidence. "
+            "Note: ESP payload is encrypted; classification is based on flow timing and volume statistics."
         )
 
     _accuracy_note = (
@@ -322,7 +336,8 @@ def predict_traffic_category(pcap_results: dict) -> dict:
     )
 
     return {
-        "predicted_category": predicted_label,
+        "predicted_category": predicted_category,
+        "raw_predicted_category": predicted_label,
         "confidence_score": confidence_score,
         "model_status": "trained_model",
         "model_note": model_note,

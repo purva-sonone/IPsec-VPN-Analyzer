@@ -44,6 +44,7 @@ class SecurityAssessment(BaseModel):
 
 class MLPrediction(BaseModel):
     predicted_category: str
+    raw_predicted_category: Optional[str] = None
     confidence_score: Optional[float] = None
     model_status: str
     model_note: str
