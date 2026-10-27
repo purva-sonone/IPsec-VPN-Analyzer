@@ -14,7 +14,17 @@ Verifies:
 """
 
 import unittest
-from backend.core.report_generator import _resolve_model_metadata, generate_pdf
+from backend.core.report_generator import (
+    _resolve_model_metadata,
+    _audit_status_color,
+    _build_rule_audit_table,
+    generate_pdf,
+    GREEN,
+    RED,
+    AMBER,
+    SLATE500,
+)
+from backend.core.security_rules import evaluate_security
 
 
 class TestModelMetadataResolution(unittest.TestCase):
@@ -242,5 +252,163 @@ class TestPdfReportGeneration(unittest.TestCase):
         self.assertTrue(pdf.startswith(b"%PDF-"))
 
 
+class TestRuleAuditColors(unittest.TestCase):
+    """
+    Unit tests for Rule Audit status colors:
+      - PASS = green
+      - FAIL = red/orange
+      - REVIEW = amber
+      - NOT OBSERVED and SKIPPED = neutral grey (SLATE500)
+      - 'NOT OBSERVED' must never look like a pass
+    """
+
+    def test_audit_status_color_mappings(self):
+        self.assertEqual(_audit_status_color("RULE PASSED"), GREEN)
+        self.assertEqual(_audit_status_color("PASS"), GREEN)
+        self.assertEqual(_audit_status_color("WEAKNESS DETECTED"), RED)
+        self.assertEqual(_audit_status_color("FAIL"), RED)
+        self.assertEqual(_audit_status_color("HIGH"), RED)
+        self.assertEqual(_audit_status_color("REVIEW"), AMBER)
+        self.assertEqual(_audit_status_color("NOT OBSERVED"), SLATE500)
+        self.assertEqual(_audit_status_color("SKIPPED"), SLATE500)
+        self.assertEqual(_audit_status_color("UNKNOWN"), SLATE500)
+
+        # Confirm NOT OBSERVED and SKIPPED never look like a pass or review
+        self.assertNotEqual(_audit_status_color("NOT OBSERVED"), GREEN)
+        self.assertNotEqual(_audit_status_color("NOT OBSERVED"), AMBER)
+        self.assertNotEqual(_audit_status_color("SKIPPED"), GREEN)
+        self.assertNotEqual(_audit_status_color("SKIPPED"), AMBER)
+
+    def test_ikev1_no_esp_rule_audit_colors(self):
+        """
+        Verify that an IKEv1 capture with no ESP renders 'NOT OBSERVED' in neutral grey,
+        NOT green, and skipped rules also render in neutral grey.
+        """
+        sa = evaluate_security({
+            "protocols_found": ["IKE"],
+            "ike_version": "IKEv1",
+        })
+
+        # Confirm security rules engine produces NOT OBSERVED for ESP
+        esp_rule = next(
+            (r for r in sa["rules_evaluated"] if r["rule"] == "ESP Payload Protection"),
+            None
+        )
+        self.assertIsNotNone(esp_rule)
+        self.assertEqual(esp_rule["status"], "NOT OBSERVED")
+
+        # Build table and inspect TableStyle commands
+        tbl = _build_rule_audit_table(sa["rules_evaluated"], sa["rules_skipped"])
+        self.assertIsNotNone(tbl)
+
+        commands = tbl._table_style.getCommands()
+        # Find TEXTCOLOR commands on column 2 (status column)
+        col2_colors = {}
+        for cmd in commands:
+            op = cmd[0]
+            start_coord = cmd[1]
+            end_coord = cmd[2]
+            if op == "TEXTCOLOR" and start_coord[0] == 2 and end_coord[0] == 2:
+                row_idx = start_coord[1]
+                col2_colors[row_idx] = cmd[3]
+
+        # Extract audit_data row mapping: header is row 0
+        evaluated_rules = sa["rules_evaluated"]
+        skipped_rules = sa["rules_skipped"]
+
+        # Row 1 is IKE Version Check (status: FAIL / WEAKNESS DETECTED)
+        ike_row = next(
+            i for i, r in enumerate(evaluated_rules, start=1)
+            if r["rule"] == "IKE Version Check"
+        )
+        self.assertEqual(col2_colors[ike_row], RED)
+
+        # ESP Payload Protection row (status: NOT OBSERVED)
+        esp_row = next(
+            i for i, r in enumerate(evaluated_rules, start=1)
+            if r["rule"] == "ESP Payload Protection"
+        )
+        self.assertEqual(col2_colors[esp_row], SLATE500)
+        # CRITICAL ASSERTION: Not observed must never look like a pass
+        self.assertNotEqual(col2_colors[esp_row], GREEN)
+        self.assertNotEqual(col2_colors[esp_row], AMBER)
+
+        # Skipped rules rows must also be SLATE500
+        r_offset = len(evaluated_rules)
+        for i in range(1, len(skipped_rules) + 1):
+            skip_row = r_offset + i
+            self.assertEqual(col2_colors[skip_row], SLATE500)
+            self.assertNotEqual(col2_colors[skip_row], GREEN)
+            self.assertNotEqual(col2_colors[skip_row], AMBER)
+
+    def test_ikev2_with_esp_rule_audit_colors(self):
+        """Verify that an IKEv2 capture with ESP renders PASS in GREEN."""
+        sa = evaluate_security({
+            "protocols_found": ["IKE", "ESP"],
+            "ike_version": "IKEv2",
+            "vpn_mode_inferred": "Tunnel",
+        })
+
+        tbl = _build_rule_audit_table(sa["rules_evaluated"], sa["rules_skipped"])
+        self.assertIsNotNone(tbl)
+
+        commands = tbl._table_style.getCommands()
+        col2_colors = {}
+        for cmd in commands:
+            if cmd[0] == "TEXTCOLOR" and cmd[1][0] == 2:
+                col2_colors[cmd[1][1]] = cmd[3]
+
+        evaluated_rules = sa["rules_evaluated"]
+        esp_row = next(
+            i for i, r in enumerate(evaluated_rules, start=1)
+            if r["rule"] == "ESP Payload Protection"
+        )
+        self.assertEqual(col2_colors[esp_row], GREEN)
+
+        ike_row = next(
+            i for i, r in enumerate(evaluated_rules, start=1)
+            if r["rule"] == "IKE Version Check"
+        )
+        self.assertEqual(col2_colors[ike_row], GREEN)
+
+    def test_generate_pdf_with_review_and_not_observed(self):
+        """Full PDF generation with diverse rule statuses including NOT OBSERVED and REVIEW."""
+        report = {
+            "id": "test-audit-colors-id",
+            "filename": "ikev1_no_esp.pcap",
+            "pcap_metrics": {
+                "packet_count": 50,
+                "ike_version": "IKEv1",
+                "protocols_found": ["IKE"],
+                "vpn_mode_inferred": "Not Extracted",
+            },
+            "security_assessment": {
+                "overall_risk_score": 2,
+                "risk_level": "Medium",
+                "score_explanation": "IKEv1 observed, no ESP traffic.",
+                "findings": [],
+                "rules_evaluated": [
+                    {"rule": "IKE Version Check", "observed_value": "IKEv1", "status": "FAIL"},
+                    {"rule": "ESP Payload Protection", "observed_value": "No ESP Packets Observed", "status": "NOT OBSERVED"},
+                    {"rule": "Vendor ID Check", "observed_value": "Custom Gateway", "status": "REVIEW"},
+                    {"rule": "Integrity Check", "observed_value": "SHA-256", "status": "PASS"},
+                ],
+                "rules_skipped": [
+                    {"rule": "Diffie-Hellman Group Strength", "reason": "DH group not extractable."},
+                ],
+            },
+            "ml_prediction": {
+                "model_status": "not_applicable",
+                "predicted_category": "Not Applicable",
+                "model_note": "No ESP packets detected in capture.",
+            },
+        }
+        pdf = generate_pdf(report)
+        self.assertIsInstance(pdf, bytes)
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertTrue(len(pdf) > 1000)
+
+
 if __name__ == "__main__":
     unittest.main()
+

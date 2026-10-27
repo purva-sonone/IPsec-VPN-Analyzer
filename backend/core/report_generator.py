@@ -43,6 +43,26 @@ RISK_COLOR = {
     "Informational": SLATE500,
 }
 
+# Rule Audit status colors:
+# PASS = green, FAIL = red/orange, REVIEW = amber, NOT OBSERVED / SKIPPED = neutral grey
+AUDIT_STATUS_COLOR = {
+    "RULE PASSED":       GREEN,
+    "PASS":              GREEN,
+    "WEAKNESS DETECTED": RED,
+    "FAIL":              RED,
+    "HIGH":              RED,
+    "REVIEW":            AMBER,
+    "NOT OBSERVED":      SLATE500,
+    "SKIPPED":           SLATE500,
+}
+
+
+def _audit_status_color(status: str) -> colors.HexColor:
+    """Return the designated color for a Rule Audit status value."""
+    s = str(status).strip().upper()
+    return AUDIT_STATUS_COLOR.get(s, SLATE500)
+
+
 
 def _styles():
     base = getSampleStyleSheet()
@@ -169,6 +189,63 @@ def _resolve_model_metadata(ml: dict) -> dict:
         "accuracy_display": "Held-out VNAT test-set accuracy unavailable (model version unspecified)",
         "dataset": "VNAT Feature Dataframe (MIT Lincoln Laboratory)",
     }
+
+
+def _build_rule_audit_table(rules_evaluated: list, rules_skipped: list):
+    """
+    Build the Rule Audit Table with standard status color coding:
+      - PASS -> green
+      - FAIL -> red
+      - REVIEW -> amber
+      - NOT OBSERVED / SKIPPED -> neutral grey (SLATE500)
+    """
+    audit_data = [["Rule", "Observed Value", "Status"]]
+    for r in rules_evaluated:
+        raw_st = (r.get("status") or "UNKNOWN").strip().upper()
+        if raw_st == "PASS":
+            disp_st = "RULE PASSED"
+        elif raw_st == "FAIL":
+            disp_st = "WEAKNESS DETECTED"
+        elif raw_st == "NOT OBSERVED":
+            disp_st = "NOT OBSERVED"
+        elif raw_st == "REVIEW":
+            disp_st = "REVIEW"
+        else:
+            disp_st = r.get("status") or "UNKNOWN"
+        audit_data.append([r.get("rule", ""), r.get("observed_value", "—"), disp_st])
+
+    for r in rules_skipped:
+        audit_data.append([r.get("rule", ""), "Not Extracted", "SKIPPED"])
+
+    if len(audit_data) <= 1:
+        return None
+
+    t = Table(audit_data, colWidths=[6.5*cm, 5.5*cm, 5.0*cm], repeatRows=1)
+    sty = [
+        ("BACKGROUND",  (0, 0), (-1, 0),  NAVY),
+        ("TEXTCOLOR",   (0, 0), (-1, 0),  WHITE),
+        ("FONTNAME",    (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("FONTSIZE",    (0, 0), (-1, 0),  9),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [SLATE100, WHITE]),
+        ("GRID",        (0, 0), (-1, -1), 0.4, SLATE300),
+        ("FONTSIZE",    (0, 1), (-1, -1), 9),
+        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING",  (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]
+
+    # Color status column: PASS=green, FAIL=red, REVIEW=amber, NOT OBSERVED/SKIPPED=neutral grey
+    for ri in range(1, len(audit_data)):
+        st = audit_data[ri][2]
+        c = _audit_status_color(st)
+        sty.append(("TEXTCOLOR",  (2, ri), (2, ri), c))
+        sty.append(("FONTNAME",   (2, ri), (2, ri), "Helvetica-Bold"))
+
+    table_style = TableStyle(sty)
+    t.setStyle(table_style)
+    t._table_style = table_style
+    return t
 
 
 def generate_pdf(report: dict) -> bytes:
@@ -311,51 +388,12 @@ def generate_pdf(report: dict) -> bytes:
 
     # ── Rule Audit ────────────────────────────────────────────────────────────
     story.append(Paragraph("Rule Audit", S["h2"]))
-    audit_data = [["Rule", "Observed Value", "Status"]]
-    for r in sa.get("rules_evaluated", []):
-        raw_st = r.get("status") or "UNKNOWN"
-        if raw_st == "PASS":
-            disp_st = "RULE PASSED"
-        elif raw_st == "FAIL":
-            disp_st = "WEAKNESS DETECTED"
-        else:
-            disp_st = raw_st
-        audit_data.append([r.get("rule",""), r.get("observed_value","—"), disp_st])
-    for r in sa.get("rules_skipped", []):
-        audit_data.append([r.get("rule",""), "Not Extracted", "SKIPPED"])
-
-    if len(audit_data) > 1:
-        t = Table(audit_data, colWidths=[6.5*cm, 5.5*cm, 5.0*cm], repeatRows=1)
-        sty = [
-            ("BACKGROUND",  (0, 0), (-1, 0),  NAVY),
-            ("TEXTCOLOR",   (0, 0), (-1, 0),  WHITE),
-            ("FONTNAME",    (0, 0), (-1, 0),  "Helvetica-Bold"),
-            ("FONTSIZE",    (0, 0), (-1, 0),  9),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [SLATE100, WHITE]),
-            ("GRID",        (0, 0), (-1, -1), 0.4, SLATE300),
-            ("FONTSIZE",    (0, 1), (-1, -1), 9),
-            ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING",  (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING",(0,0), (-1, -1), 5),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ]
-        # Color status column
-        r_offset = len(sa.get("rules_evaluated", []))
-        for ri in range(1, r_offset + 1):
-            st = audit_data[ri][2]
-            if st == "RULE PASSED":
-                c = GREEN
-            elif st == "WEAKNESS DETECTED":
-                c = RED
-            else:
-                c = AMBER
-            sty.append(("TEXTCOLOR",  (2, ri), (2, ri), c))
-            sty.append(("FONTNAME",   (2, ri), (2, ri), "Helvetica-Bold"))
-        for ri in range(r_offset + 1, len(audit_data)):
-            sty.append(("TEXTCOLOR",  (2, ri), (2, ri), AMBER))
-            sty.append(("FONTNAME",   (2, ri), (2, ri), "Helvetica-Bold"))
-        t.setStyle(TableStyle(sty))
-        story.append(t)
+    audit_table = _build_rule_audit_table(
+        sa.get("rules_evaluated", []),
+        sa.get("rules_skipped", []),
+    )
+    if audit_table is not None:
+        story.append(audit_table)
     story.append(Spacer(1, 0.3*cm))
 
     # ── ML Traffic Classification ─────────────────────────────────────────────
