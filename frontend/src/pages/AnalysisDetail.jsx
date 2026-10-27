@@ -407,7 +407,7 @@ function MLProbaTooltip({ active, payload }) {
   );
 }
 
-function MLSection({ ml, distribution, stats, beaconing }) {
+function MLSection({ ml, distribution, stats, beaconing, packets }) {
   if (!ml) return null;
   const { model_status, model_note, predicted_category, confidence_score,
           all_class_probabilities, dataset_note } = ml;
@@ -611,13 +611,99 @@ function MLSection({ ml, distribution, stats, beaconing }) {
       </div>
 
       {/* ── C2 Beaconing & Timing Anomaly Analysis ── */}
-      <BeaconingAnalysisCard beaconing={beaconing} />
+      <BeaconingAnalysisCard beaconing={beaconing} packets={packets} />
     </div>
   );
 }
 
 // ── Beaconing & Anomaly Analysis Card ───────────────────────────────────────
-function BeaconingAnalysisCard({ beaconing }) {
+function resolveBeaconing(beaconing, packets) {
+  if (beaconing && beaconing.status === 'evaluated') return beaconing;
+  if (!packets || packets.length < 5) return beaconing;
+
+  const parsed = [];
+  const sizes = [];
+  for (const p of packets) {
+    if (p.timestamp && typeof p.timestamp === 'string' && p.timestamp.includes('s')) {
+      const match = p.timestamp.replace('+', '').replace('s', '').trim();
+      const val = parseFloat(match);
+      if (!isNaN(val)) {
+        parsed.push(val);
+        sizes.push(p.length || 0);
+      }
+    }
+  }
+  if (parsed.length < 5) return beaconing;
+
+  const iats = [];
+  for (let i = 1; i < parsed.length; i++) {
+    const diff = parsed[i] - parsed[i - 1];
+    if (diff > 1e-5) iats.push(diff);
+  }
+  if (iats.length < 4) return beaconing;
+
+  const meanIat = iats.reduce((a, b) => a + b, 0) / iats.length;
+  const variance = iats.reduce((a, b) => a + Math.pow(b - meanIat, 2), 0) / iats.length;
+  const stdIat = Math.sqrt(variance);
+  const cvIat = meanIat > 0 ? stdIat / meanIat : 99;
+
+  const sortedIats = [...iats].sort((a, b) => a - b);
+  const medianIat = sortedIats[Math.floor(sortedIats.length / 2)];
+
+  const lower = 0.75 * medianIat;
+  const upper = 1.25 * medianIat;
+  const inCluster = iats.filter(x => x >= lower && x <= upper).length;
+  const clusterRatio = inCluster / iats.length;
+
+  const bursts = iats.filter(x => x < 0.05).length;
+  const burstRatio = bursts / iats.length;
+
+  const timingReg = Math.max(0, Math.min(100, (1.0 - Math.min(cvIat, 1.5) / 1.5) * 100));
+  let score = (timingReg / 100) * 45 + clusterRatio * 35;
+  if (medianIat >= 0.5 && medianIat <= 120) score += 20;
+  else if (medianIat >= 0.2) score += 12;
+  else score += Math.max(0, 5 * (1 - burstRatio));
+
+  if (burstRatio > 0.6) score *= (1 - (burstRatio - 0.5));
+  const anomalyScore = parseFloat(Math.max(0, Math.min(100, score)).toFixed(1));
+
+  const isHigh = anomalyScore >= 68;
+  const isMed = anomalyScore >= 40 && anomalyScore < 68;
+  const insights = [];
+  if (isHigh) {
+    insights.push(`Observed strict inter-arrival periodicity around ${medianIat.toFixed(2)}s with low jitter (CV = ${cvIat.toFixed(2)}).`);
+    insights.push(`${Math.round(clusterRatio * 100)}% of packet intervals fall tightly within ±25% of median interval.`);
+  } else if (isMed) {
+    insights.push(`Moderate timing regularity observed (CV = ${cvIat.toFixed(2)}, interval ~${medianIat.toFixed(2)}s).`);
+    insights.push('May correspond to routine background keep-alives or periodic synchronization.');
+  } else {
+    insights.push(`High timing variance (CV = ${cvIat.toFixed(2)}) indicates sporadic, variable application traffic.`);
+    if (burstRatio > 0.3) {
+      insights.push(`${Math.round(burstRatio * 100)}% of packets arrived in rapid bursts (<50ms), typical of interactive sessions.`);
+    }
+  }
+
+  return {
+    status: 'evaluated',
+    anomaly_score: anomalyScore,
+    anomaly_level: isHigh ? 'HIGH' : isMed ? 'ELEVATED' : 'LOW',
+    beacon_detected: isHigh,
+    timing_regularity_pct: parseFloat(timingReg.toFixed(1)),
+    estimated_interval_sec: parseFloat(medianIat.toFixed(3)),
+    jitter_sec: parseFloat(stdIat.toFixed(3)),
+    coefficient_of_variation: parseFloat(cvIat.toFixed(3)),
+    verdict: isHigh
+      ? 'High Risk: Periodic Beaconing Detected (Strong C2 Indicator)'
+      : isMed
+      ? 'Moderate: Semi-Periodic Activity / Automated Polling'
+      : 'Normal: Aperiodic / Human Interactive Traffic',
+    insights,
+  };
+}
+
+function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
+  const beaconing = resolveBeaconing(rawBeaconing, packets);
+
   if (!beaconing || beaconing.status === 'insufficient_data') {
     return (
       <div style={{
@@ -1165,6 +1251,7 @@ export default function AnalysisDetail() {
           distribution={m?.packet_size_distribution}
           stats={m?.packet_size_stats}
           beaconing={m?.beaconing_analysis}
+          packets={m?.packets}
         />
       </div>
 
