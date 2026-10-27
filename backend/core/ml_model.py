@@ -15,13 +15,13 @@ IMPORTANT — HONEST LIMITATIONS:
     high variance and predictions should be treated as indicative only.
 
 Model versions:
-  v1 (default) — 17 features including flow_iat_* and byte columns.
+  v1           — 17 features including flow_iat_* and byte columns.
                  traffic_classifier.joblib
-  v2 (opt-in)  — 11 independently verified features; drops flow_iat_* (confirmed
+  v2 (default) — 11 independently verified features; drops flow_iat_* (confirmed
                  training-inference mismatch) and byte columns (100% identical to
                  packet count columns in dataset). traffic_classifier_v2.joblib
 
-Select version via MODEL_VERSION environment variable (default: 'v1').
+Select version via MODEL_VERSION environment variable (default: 'v2').
 V2 is NOT claimed to be more accurate on real traffic; it eliminates
 known redundant/mismatched features. Real-world accuracy depends on capture
 quality and is NOT guaranteed by held-out VNAT test-set metrics.
@@ -38,11 +38,13 @@ import math
 
 logger = logging.getLogger(__name__)
 
-# ── Model version selection (MODEL_VERSION env-var, default 'v1') ─────────────
+# ── Model version selection (MODEL_VERSION env-var, default 'v2') ─────────────
 # Read once at import time; restart the server to change.
 
-_raw_model_ver = os.environ.get('MODEL_VERSION', 'v1').strip().lower()
-_MODEL_VERSION = _raw_model_ver if _raw_model_ver in ('v1', 'v2') else 'v1'
+_raw_model_ver = os.environ.get('MODEL_VERSION', 'v2').strip().lower()
+_MODEL_VERSION = _raw_model_ver if _raw_model_ver in ('v1', 'v2') else 'v2'
+
+
 
 # ── Model paths ───────────────────────────────────────────────────────────────
 

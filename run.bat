@@ -7,7 +7,7 @@ echo.
 
 echo [1/2] Starting Backend (FastAPI) on port 8000...
 cd backend
-start cmd /k "title Backend-FastAPI && python -m uvicorn main:app --reload --port 8000"
+start cmd /k "title Backend-FastAPI && set MODEL_VERSION=v2 && python -m uvicorn main:app --reload --port 8000"
 cd ..
 
 echo [2/2] Starting Frontend (Vite) on port 5173...

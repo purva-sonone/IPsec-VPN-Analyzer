@@ -50,6 +50,7 @@ class MLPrediction(BaseModel):
     features_available: List[str] = []
     features_required_missing: List[str] = []
     all_class_probabilities: Optional[dict] = None
+    model_version: Optional[str] = None
     dataset_note: Optional[str] = None
 
 
