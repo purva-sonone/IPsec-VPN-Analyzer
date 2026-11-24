@@ -4,7 +4,7 @@ import {
   ArrowLeft, Download, Shield, Activity, Lock, Key, Wifi,
   AlertTriangle, CheckCircle, XCircle, Info, Cpu, FlaskConical,
   SkipForward, ListChecks, AlertCircle, Layers, RefreshCw,
-  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch, Radio, Sparkles, HelpCircle
+  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch, Radio, Sparkles, HelpCircle, FileText
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer
@@ -407,7 +407,8 @@ function MLProbaTooltip({ active, payload }) {
   );
 }
 
-function MLSection({ ml, distribution, stats, beaconing, packets }) {
+// ── Feature 1: Class Probability Card (Main Bar Graph) ────────────────────
+function ClassProbabilityCard({ ml }) {
   if (!ml) return null;
   const { model_status, model_note, predicted_category: raw_pred, confidence_score,
           all_class_probabilities, dataset_note, raw_predicted_category } = ml;
@@ -419,347 +420,285 @@ function MLSection({ ml, distribution, stats, beaconing, packets }) {
         .sort((a, b) => b.value - a.value)
     : [];
 
-  // Always display the actual traffic category (e.g. CHAT, C2) even if historical record had Inconclusive
   const predicted_category = (raw_pred && raw_pred.includes('Inconclusive'))
     ? (raw_predicted_category || (probaArr.length > 0 ? probaArr[0].name : raw_pred))
     : (raw_pred || 'Unknown');
 
-  // Determine confidence/ambiguity flags (only when a trained model result exists)
   const isLowConf   = confPct != null && confPct < LOW_CONF_THRESHOLD;
   const spread      = probaArr.length >= 2 ? probaArr[0].value - probaArr[1].value : null;
   const isAmbiguous = spread != null && spread < AMBIG_SPREAD_THRESHOLD;
   const isC2        = predicted_category === 'C2';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Status banner */}
-      {model_status === 'not_applicable' ? (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-          <AlertCircle style={{ width: 15, height: 15, color: '#64748B', flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>Classification Not Applicable</p>
-            <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>{model_note}</p>
-          </div>
-        </div>
-      ) : model_status !== 'trained_model' ? (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
-          <AlertTriangle style={{ width: 15, height: 15, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', marginBottom: 2 }}>Model Notice</p>
-            <p style={{ fontSize: 12, color: '#B45309', lineHeight: 1.6 }}>{model_note}</p>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Active model notice */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.75rem 0.875rem', borderRadius: 8, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
-            <FlaskConical style={{ width: 14, height: 14, color: '#7C3AED', flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontSize: 11, color: '#6D28D9', lineHeight: 1.6 }}>
-              <strong>Random Forest Traffic Classifier Active.</strong>{' '}
-              {dataset_note || 'Trained on MIT Lincoln Laboratory VNAT Feature Dataframe (15,093 samples).'}
-            </p>
-          </div>
+    <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+      <div>
+        <SectionHead icon={Cpu} title="ML Traffic Classification" action={
+          <span className="badge badge-ml" style={{ fontSize: 10 }}>500-Tree RF</span>
+        } />
 
-          {/* Prediction & Confidence Block */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div style={{ padding: '1.25rem', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-              <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 6 }}>
-                Predicted Traffic Category
-              </p>
-              <p style={{ fontSize: '1.75rem', fontWeight: 800, color: ML_COLORS[predicted_category] || '#6D28D9', lineHeight: 1.1 }}>
-                {predicted_category}
-              </p>
-              <p style={{ fontSize: 11, color: '#64748B', marginTop: 6 }}>
-                Inferred from inter-arrival timing &amp; flow volume metrics
+        {model_status === 'not_applicable' ? (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', marginTop: '0.75rem' }}>
+            <AlertCircle style={{ width: 15, height: 15, color: '#64748B', flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>Classification Not Applicable</p>
+              <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6, margin: 0 }}>{model_note}</p>
+            </div>
+          </div>
+        ) : model_status !== 'trained_model' ? (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', marginTop: '0.75rem' }}>
+            <AlertTriangle style={{ width: 15, height: 15, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#92400E', marginBottom: 2 }}>Model Notice</p>
+              <p style={{ fontSize: 12, color: '#B45309', lineHeight: 1.6, margin: 0 }}>{model_note}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Active model notice */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.625rem 0.75rem', borderRadius: 8, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+              <FlaskConical style={{ width: 13, height: 13, color: '#7C3AED', flexShrink: 0, marginTop: 2 }} />
+              <p style={{ fontSize: 11, color: '#6D28D9', lineHeight: 1.5, margin: 0 }}>
+                <strong>Random Forest Active.</strong> {dataset_note || 'Trained on MIT Lincoln Laboratory VNAT dataset.'}
               </p>
             </div>
 
-            <div className="card-surface" style={{ padding: '1.25rem', borderRadius: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', margin: 0 }}>
-                  Model Confidence Score
+            {/* Prediction & Confidence Block */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', marginBottom: 4 }}>
+                  Predicted Category
                 </p>
-                <span
-                  title="ML Model Confidence (0–100%): Posterior class probability generated by the 500-tree Random Forest classifier for the predicted encrypted traffic category."
-                  style={{ cursor: 'help', display: 'flex', alignItems: 'center' }}
-                >
-                  <HelpCircle size={12} style={{ color: 'var(--text-muted)' }} />
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>
-                  {confPct != null ? `${confPct}%` : 'N/A'}
-                </span>
-                <span style={{ fontSize: 11, color: '#64748B' }}>probability</span>
-              </div>
-              {confPct != null && (
-                <div style={{ height: 6, width: '100%', backgroundColor: '#E2E8F0', borderRadius: 3, marginTop: 10, overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%', width: `${confPct}%`,
-                    backgroundColor: confPct > 75 ? '#16A34A' : confPct > LOW_CONF_THRESHOLD ? '#2563EB' : '#D97706',
-                    borderRadius: 3, transition: 'width 0.4s ease',
-                  }} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Confidence / Ambiguity Caution Notes ────────────────────── */}
-          {(isLowConf || isAmbiguous) && (
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
-              padding: '0.75rem 1rem', borderRadius: 8,
-              backgroundColor: '#FFFBEB', border: '1px solid #FDE68A',
-            }}>
-              <AlertTriangle style={{ width: 14, height: 14, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 3 }}>
-                  {isLowConf && isAmbiguous
-                    ? 'Low Confidence & Ambiguous Prediction'
-                    : isLowConf ? 'Low Confidence Prediction'
-                    : 'Ambiguous Prediction'}
+                <p style={{ fontSize: '1.4rem', fontWeight: 800, color: ML_COLORS[predicted_category] || '#6D28D9', lineHeight: 1.1, margin: 0 }}>
+                  {predicted_category}
                 </p>
-                <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.6 }}>
-                  {isLowConf && `Confidence is ${confPct}%, below the ${LOW_CONF_THRESHOLD}% threshold. `}
-                  {isAmbiguous && spread != null && `The top two categories differ by only ${spread.toFixed(1)} pp (threshold: ${AMBIG_SPREAD_THRESHOLD} pp). `}
-                  The classifier's output should be treated as indicative for this capture.
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, margin: '4px 0 0' }}>
+                  Inferred from flow cadence
                 </p>
-              </div>
-            </div>
-          )}
-
-          {/* ── C2 Classification Caution ────────────────────────────────── */}
-          {isC2 && (
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
-              padding: '0.75rem 1rem', borderRadius: 8,
-              backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
-            }}>
-              <Info style={{ width: 14, height: 14, color: '#B91C1C', flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 600, color: '#991B1B', marginBottom: 3 }}>
-                  C2 Classification — Does Not Confirm Malicious Activity
-                </p>
-                <p style={{ fontSize: 11, color: '#B91C1C', lineHeight: 1.6 }}>
-                  The model predicts <strong>C2 (Command &amp; Control)</strong> traffic patterns based on flow
-                  timing and volume statistics. This is a <em>traffic category</em> label from the VNAT
-                  dataset — it does not confirm that the VPN carries malicious traffic or that a
-                  cyberattack is underway. The same flow features can appear in legitimate control-plane
-                  or management traffic. Treat this as a signal for further investigation only.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ── Class Probability Bar Chart (Recharts) ───────────────────── */}
-          {probaArr.length > 0 && (
-            <div style={{ borderRadius: 8, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-              <p style={{
-                padding: '0.5rem 0.875rem', fontSize: 10, fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8',
-                borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC',
-              }}>
-                Class Probability Breakdown
-              </p>
-              <div style={{ padding: '0.875rem 1rem' }}>
-                <ResponsiveContainer width="100%" height={probaArr.length * 36 + 8}>
-                  <BarChart
-                    data={probaArr}
-                    layout="vertical"
-                    margin={{ top: 0, right: 40, left: 80, bottom: 0 }}
-                    barSize={14}
-                  >
-                    <XAxis
-                      type="number"
-                      domain={[0, 100]}
-                      tickFormatter={v => `${v}%`}
-                      tick={{ fontSize: 10, fill: '#94A3B8' }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 11, fontWeight: 600, fill: '#334155' }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={76}
-                    />
-                    <Tooltip content={<MLProbaTooltip />} cursor={{ fill: 'rgba(37,99,235,0.05)' }} />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                      {probaArr.map((d) => (
-                        <Cell
-                          key={d.name}
-                          fill={d.name === predicted_category
-                            ? ML_COLORS[d.name] || '#6D28D9'
-                            : `${ML_COLORS[d.name] || '#94A3B8'}50`}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, textAlign: 'right' }}>
-                  Highlighted bar = predicted category
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ── Explainable AI (XAI) Decision Factors ───────────────────────── */}
-          {ml.explainability && ml.explainability.top_contributing_factors?.length > 0 && (
-            <div style={{
-              borderRadius: 12,
-              border: '1px solid var(--border)',
-              backgroundColor: 'var(--bg-card)',
-              overflow: 'hidden',
-              boxShadow: 'var(--shadow-sm)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.85rem 1.25rem',
-                backgroundColor: 'var(--bg-surface)',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Sparkles style={{ width: 16, height: 16, color: 'var(--blue)' }} />
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      Explainable AI (XAI) — Decision Factors
-                    </span>
-                    <span style={{
-                      marginLeft: 8,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: 'var(--blue)',
-                      backgroundColor: 'var(--blue-light)',
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      border: '1px solid var(--blue-border)',
-                    }}>
-                      Tree Decision Path
-                    </span>
-                  </div>
-                </div>
-                <span style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 700 }}>
-                  Why classified as {predicted_category}?
-                </span>
               </div>
 
-              <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                {ml.explainability.summary && (
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, fontWeight: 500, margin: 0 }}>
-                    {ml.explainability.summary}
+              <div style={{ padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', margin: 0 }}>
+                    Confidence Score
                   </p>
+                  <span title="Posterior class probability generated by the 500-tree Random Forest classifier." style={{ cursor: 'help' }}>
+                    <HelpCircle size={11} style={{ color: 'var(--text-muted)' }} />
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                    {confPct != null ? `${confPct}%` : 'N/A'}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>probability</span>
+                </div>
+                {confPct != null && (
+                  <div style={{ height: 4, width: '100%', backgroundColor: 'var(--border)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${confPct}%`,
+                      backgroundColor: confPct > 75 ? 'var(--green)' : confPct > LOW_CONF_THRESHOLD ? 'var(--blue)' : 'var(--amber)',
+                      borderRadius: 2, transition: 'width 0.4s ease',
+                    }} />
+                  </div>
                 )}
-
-                {/* Factors List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                  {ml.explainability.top_contributing_factors.map((factor) => (
-                    <div
-                      key={factor.rank}
-                      style={{
-                        padding: '0.75rem',
-                        borderRadius: 8,
-                        backgroundColor: 'var(--bg-surface)',
-                        border: '1px solid var(--border)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 20,
-                            height: 20,
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--blue-light)',
-                            color: 'var(--blue)',
-                            fontSize: 11,
-                            fontWeight: 700,
-                          }}>
-                            {factor.rank}
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {factor.feature_name}
-                          </span>
-                          <span style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: 'var(--green-text)',
-                            backgroundColor: 'var(--green-light)',
-                            border: '1px solid var(--green-border)',
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            fontFamily: 'monospace',
-                          }}>
-                            {factor.observed_value}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>Attribution Impact</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>
-                            {factor.impact_percentage}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Impact progress bar */}
-                      <div style={{ height: 4, width: '100%', backgroundColor: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.min(100, factor.impact_percentage)}%`,
-                          backgroundColor: 'var(--blue)',
-                          borderRadius: 2,
-                        }} />
-                      </div>
-
-                      {/* Plain English explanation */}
-                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                        {factor.reason}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '0.25rem' }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    Attribution computes class probability shift across all 500 decision trees.
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--blue)', fontWeight: 600 }}>
-                    Higher Impact % = stronger driver toward {predicted_category}
-                  </span>
-                </div>
               </div>
             </div>
-          )}
 
-          {/* Model Note — classification scope disclaimer */}
-          <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, borderLeft: '2px solid #DDD6FE', paddingLeft: '0.75rem' }}>
-            {model_note}
-          </p>
-        </>
-      )}
+            {/* Caution banners if applicable */}
+            {(isLowConf || isAmbiguous) && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.5rem 0.75rem', borderRadius: 6, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', marginBottom: '0.75rem' }}>
+                <AlertTriangle style={{ width: 13, height: 13, color: '#D97706', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.5, margin: 0 }}>
+                  {isLowConf && `Confidence is ${confPct}% (below ${LOW_CONF_THRESHOLD}%). `}
+                  {isAmbiguous && spread != null && `Top two classes differ by only ${spread.toFixed(1)} pp. `}
+                  Classification should be treated as indicative.
+                </p>
+              </div>
+            )}
 
-      {/* ── Packet Size Distribution ── */}
-      <div style={{ marginTop: '0.5rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.75rem' }}>
-          <BarChart3 style={{ width: 14, height: 14, color: '#2563EB' }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Packet-Size Distribution (Actual PCAP Data)
-          </span>
-        </div>
-        <PacketSizeDistribution distribution={distribution} stats={stats} />
+            {isC2 && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '0.5rem 0.75rem', borderRadius: 6, backgroundColor: '#FEF2F2', border: '1px solid #FECACA', marginBottom: '0.75rem' }}>
+                <Info style={{ width: 13, height: 13, color: '#B91C1C', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: '#991B1B', lineHeight: 1.5, margin: 0 }}>
+                  <strong>C2 Classification:</strong> Behavioral profile matches VNAT C2 flow timings; does not confirm malicious traffic.
+                </p>
+              </div>
+            )}
+
+            {/* Main Bar Graph — Class Probability Breakdown */}
+            {probaArr.length > 0 && (
+              <div style={{ borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
+                <div style={{
+                  padding: '0.5rem 0.75rem', fontSize: 10, fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)',
+                  borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span>Class Probability Breakdown (Main Visualizer)</span>
+                  <span style={{ fontSize: 9, color: 'var(--blue)', fontWeight: 700 }}>5 Classes</span>
+                </div>
+                <div style={{ padding: '0.625rem 0.75rem 0.35rem' }}>
+                  <ResponsiveContainer width="100%" height={probaArr.length * 28 + 12}>
+                    <BarChart
+                      data={probaArr}
+                      layout="vertical"
+                      margin={{ top: 0, right: 35, left: 75, bottom: 0 }}
+                      barSize={11}
+                    >
+                      <XAxis
+                        type="number"
+                        domain={[0, 100]}
+                        tickFormatter={v => `${v}%`}
+                        tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--text-primary)' }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={72}
+                      />
+                      <Tooltip content={<MLProbaTooltip />} cursor={{ fill: 'rgba(37,99,235,0.05)' }} />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {probaArr.map((d) => (
+                          <Cell
+                            key={d.name}
+                            fill={d.name === predicted_category
+                              ? ML_COLORS[d.name] || '#6D28D9'
+                              : `${ML_COLORS[d.name] || '#94A3B8'}50`}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, textAlign: 'right', margin: '2px 0 0' }}>
+                    Highlighted bar = predicted category
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* ── C2 Beaconing & Timing Anomaly Analysis ── */}
-      <BeaconingAnalysisCard beaconing={beaconing} packets={packets} />
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, borderLeft: '2px solid var(--blue)', paddingLeft: '0.6rem', margin: '0.75rem 0 0' }}>
+        {model_note || 'Encrypted ESP traffic classified via statistical timing without payload decryption.'}
+      </p>
+    </div>
+  );
+}
+
+// ── Feature 2: Packet-Size Distribution Card ──────────────────────────────
+function PacketDistributionCard({ distribution = [], stats = {} }) {
+  return (
+    <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+      <div>
+        <SectionHead icon={BarChart3} title="Packet-Size Distribution" action={
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Actual PCAP Lengths</span>
+        } />
+        <div style={{ marginTop: '0.75rem' }}>
+          <PacketSizeDistribution distribution={distribution} stats={stats} />
+        </div>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: '0.5rem', margin: '0.75rem 0 0' }}>
+        Audits packet frame size variance across outer IPsec ESP and control handshakes.
+      </p>
+    </div>
+  );
+}
+
+// ── Feature 3: Explainable AI Decision Factors ────────────────────────────
+function XaiCard({ ml }) {
+  if (!ml || !ml.explainability || !ml.explainability.top_contributing_factors?.length) {
+    return (
+      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+        <Sparkles style={{ width: 22, height: 22, color: 'var(--text-muted)', marginBottom: 8 }} />
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Tree Attribution Not Available</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Sufficient packet flow metrics required for decision path breakdown.</p>
+      </div>
+    );
+  }
+
+  const { predicted_category: raw_pred, raw_predicted_category } = ml;
+  const predicted_category = raw_pred && raw_pred.includes('Inconclusive') ? (raw_predicted_category || raw_pred) : (raw_pred || 'traffic class');
+
+  return (
+    <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+      <div>
+        <SectionHead icon={Sparkles} title="Explainable AI (XAI) Decision Factors" action={
+          <span className="badge badge-info" style={{ fontSize: 10 }}>Tree Path</span>
+        } />
+
+        {ml.explainability.summary && (
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0.75rem 0 0.625rem', fontWeight: 500 }}>
+            {ml.explainability.summary}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {ml.explainability.top_contributing_factors.slice(0, 3).map((factor) => (
+            <div
+              key={factor.rank}
+              style={{
+                padding: '0.625rem 0.75rem',
+                borderRadius: 8,
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    backgroundColor: 'var(--blue-light)', color: 'var(--blue)',
+                    fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                  }}>
+                    {factor.rank}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {factor.feature_name}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, color: 'var(--green-text)',
+                    backgroundColor: 'var(--green-light)', border: '1px solid var(--green-border)',
+                    padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace', flexShrink: 0,
+                  }}>
+                    {factor.observed_value}
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', flexShrink: 0 }}>
+                  {factor.impact_percentage}%
+                </span>
+              </div>
+              <div style={{ height: 3, width: '100%', backgroundColor: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.min(100, factor.impact_percentage)}%`,
+                  backgroundColor: 'var(--blue)',
+                  borderRadius: 2,
+                }} />
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                {factor.reason}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.75rem' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          Attribution computes class probability shift across all 500 decision trees.
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--blue)', fontWeight: 600 }}>
+          Stronger driver toward {predicted_category}
+        </span>
+      </div>
     </div>
   );
 }
@@ -882,20 +821,20 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
 
   if (!beaconing || beaconing.status === 'insufficient_data') {
     return (
-      <div style={{
-        marginTop: '1rem',
-        padding: '0.875rem 1rem',
-        backgroundColor: '#F8FAFC',
-        borderRadius: 10,
-        border: '1px solid #E2E8F0',
+      <div className="card" style={{
+        padding: '1.25rem',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <Radio style={{ width: 14, height: 14, color: '#64748B' }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            C2 Beaconing & Timing Anomaly Analysis
-          </span>
-        </div>
-        <p style={{ fontSize: 11, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+        <Radio style={{ width: 22, height: 22, color: 'var(--text-muted)', marginBottom: 8 }} />
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>
+          C2 Beaconing & Timing Anomaly Analysis
+        </p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           {beaconing?.explanation || 'Insufficient packets to evaluate inter-arrival timing regularity.'}
         </p>
       </div>
@@ -915,12 +854,15 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
   const intervalsCount = beaconing.total_intervals_analyzed ?? beaconing.sample_size_intervals;
 
   return (
-    <div style={{
-      marginTop: '1rem',
+    <div className="card" style={{
       padding: '1.25rem',
       borderRadius: 12,
-      border: `1px solid ${isHigh ? '#FECACA' : '#E2E8F0'}`,
-      backgroundColor: isHigh ? '#FFF5F5' : '#FFFFFF',
+      border: `1px solid ${isHigh ? '#FECACA' : 'var(--border)'}`,
+      backgroundColor: isHigh ? '#FFF5F5' : 'var(--bg-card)',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      justifyContent: 'space-between',
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: '1rem' }}>
@@ -1335,140 +1277,176 @@ export default function AnalysisDetail() {
         </a>
       </div>
 
-      {/* ── Row 1: Protocol Summary + Risk Score ──────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', alignItems: 'start' }}>
-        {/* Protocol summary */}
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <SectionHead icon={Layers} title="Protocol Summary" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.625rem' }}>
-            <MetricCard icon={Activity} label="Packet Count" value={String(m?.packet_count ?? '—')} />
-            <MetricCard icon={Key}      label="IKE Version"  value={m?.ike_version} />
-            <MetricCard icon={Wifi}     label="Protocols"    value={m?.protocols_found?.join(', ')} />
-            <MetricCard icon={Shield}   label="VPN Mode"
-              value={
-                m?.vpn_mode_inferred?.startsWith('Tunnel')    ? 'Tunnel' :
-                m?.vpn_mode_inferred?.startsWith('Transport') ? 'Transport' : 'Not Extracted'
-              }
-            />
+      {/* ── UPPER SECTION: Data Visualizations & Traffic Graphs ────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <BarChart3 style={{ width: 16, height: 16, color: 'var(--blue)' }} />
+            <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Traffic Visualizations & Behavioral Analytics
+            </h2>
           </div>
-          {m?.vpn_mode_inferred?.includes('Inferred') && (
-            <div className="alert-warn" style={{ marginTop: '0.875rem' }}>
-              <AlertCircle style={{ width: 13, height: 13, color: '#B45309', flexShrink: 0, marginTop: 1 }} />
-              <p style={{ fontSize: 11, color: '#92400E' }}>
-                VPN Mode is inferred from observable packet characteristics, not definitively determined.
-              </p>
-            </div>
-          )}
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Flow Timing & Cadence Telemetry</span>
         </div>
 
-        {/* Risk Score */}
+        {/* Row 1: 2-Column Desktop Grid (Main Bar Graph + Packet-Size Distribution) */}
         <div style={{
-          borderRadius: 14, border: `1px solid ${riskAccent.border}`,
-          backgroundColor: riskAccent.bg, padding: '1.5rem',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          textAlign: 'center', gap: '0.5rem',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1rem',
+          alignItems: 'stretch',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', margin: 0 }}>
-              Overall Risk
-            </p>
-            <span
-              title="Overall Risk Score (0–100): Calculated by evaluating cryptographic parameters (IKE version, DH group, encryption cipher) and payload protection against security rules."
-              style={{ cursor: 'help', display: 'flex', alignItems: 'center' }}
-            >
-              <HelpCircle size={13} style={{ color: 'var(--text-muted)' }} />
-            </span>
-          </div>
-          <div style={{ fontSize: '3.5rem', fontWeight: 800, color: riskAccent.text, lineHeight: 1 }}>
-            {sa?.overall_risk_score ?? 0}
-          </div>
-          <span className={`badge ${rc.badge}`} style={{ fontSize: '0.8rem', padding: '0.3rem 0.875rem' }}>
-            {sa?.risk_level ?? 'Unknown'}
-          </span>
-          {sa?.score_explanation && (
-            <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, marginTop: 4, maxWidth: 220 }}>
-              {sa.score_explanation}
-            </p>
-          )}
+          <ClassProbabilityCard ml={ml} />
+          <PacketDistributionCard distribution={m?.packet_size_distribution} stats={m?.packet_size_stats} />
+        </div>
+
+        {/* Row 2: 2-Column Desktop Grid (XAI Decision Factors + C2 Beaconing Cadence) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1rem',
+          alignItems: 'stretch',
+        }}>
+          <XaiCard ml={ml} />
+          <BeaconingAnalysisCard beaconing={m?.beaconing_analysis} packets={m?.packets} />
         </div>
       </div>
 
-      {/* ── Row 2: Cryptographic Parameters ───────────────────────────── */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <SectionHead icon={Lock} title="Cryptographic Parameters" />
-        <CryptoRow label="Encryption Algorithm"   value={m?.encryption} />
-        <CryptoRow label="Key Exchange (DH Group)" value={m?.key_exchange} />
-        <CryptoRow label="Authentication Method"   value={m?.authentication} />
-        <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 12, paddingTop: 12, borderTop: '1px solid #F1F5F9', lineHeight: 1.65 }}>
-          Values marked "Not Extracted" were not observable. IKE negotiation parameters are only visible if
-          the IKE_SA_INIT exchange is present in the capture.
-        </p>
-      </div>
+      {/* ── LOWER SECTION: Written Analysis, Risk Assessment, Findings & Evidence ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+          <FileText style={{ width: 16, height: 16, color: 'var(--blue)' }} />
+          <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Written Analysis, Risk Assessment & Security Findings
+          </h2>
+        </div>
 
-      {/* ── Feature 3: Evidence-Based Security Findings ───────────────── */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <SectionHead
-          icon={AlertTriangle}
-          title="Evidence-Based Security Findings"
-          action={<span style={{ fontSize: 12, color: '#94A3B8' }}>{sa?.findings?.length ?? 0} finding{sa?.findings?.length !== 1 ? 's' : ''}</span>}
-        />
-
-        {sa?.overall_risk_score === 0 && (
-          <div className="alert-warn" style={{ marginBottom: '1rem' }}>
-            <AlertCircle style={{ width: 13, height: 13, color: '#B45309', flexShrink: 0, marginTop: 1 }} />
+        {/* Security Analysis & Risk Assessment Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', alignItems: 'stretch' }}>
+          {/* Protocol Summary Card */}
+          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
-              <p style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 2 }}>
-                Risk Score 0 — does not mean the VPN is fully secure
-              </p>
-              <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.6 }}>
-                A score of 0 means no high-risk values were found among the extractable parameters.{' '}
-                {sa?.rules_skipped?.length > 0
-                  ? `${sa.rules_skipped.length} rule(s) were skipped because parameters were not visible.`
-                  : 'All observable parameters passed.'}
-              </p>
+              <SectionHead icon={Layers} title="Protocol Summary (Security Analysis)" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.625rem', marginTop: '0.75rem' }}>
+                <MetricCard icon={Activity} label="Packet Count" value={String(m?.packet_count ?? '—')} />
+                <MetricCard icon={Key}      label="IKE Version"  value={m?.ike_version} />
+                <MetricCard icon={Wifi}     label="Protocols"    value={m?.protocols_found?.join(', ')} />
+                <MetricCard icon={Shield}   label="VPN Mode"
+                  value={
+                    m?.vpn_mode_inferred?.startsWith('Tunnel')    ? 'Tunnel' :
+                    m?.vpn_mode_inferred?.startsWith('Transport') ? 'Transport' : 'Not Extracted'
+                  }
+                />
+              </div>
             </div>
-          </div>
-        )}
-
-        {(sa?.findings?.length ?? 0) === 0 ? (
-          <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '1.5rem' }}>No security findings.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-            {highF.map((f, i) => <FindingCard key={i} f={f} />)}
-            {infoF.length > 0 && (
-              <>
-                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginTop: 8 }}>
-                  Informational & Hardening Observations
+            {m?.vpn_mode_inferred?.includes('Inferred') && (
+              <div className="alert-warn" style={{ marginTop: '0.875rem' }}>
+                <AlertCircle style={{ width: 13, height: 13, color: '#B45309', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: '#92400E', margin: 0 }}>
+                  VPN Mode is inferred from observable packet characteristics, not definitively determined.
                 </p>
-                {infoF.map((f, i) => <FindingCard key={`info-${i}`} f={f} />)}
-              </>
+              </div>
             )}
           </div>
-        )}
 
-        <AnalysisCoverageSummary evaluated={sa?.rules_evaluated ?? []} skipped={sa?.rules_skipped ?? []} />
-        <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
-      </div>
+          {/* Overall Risk Score */}
+          <div style={{
+            borderRadius: 14, border: `1px solid ${riskAccent.border}`,
+            backgroundColor: riskAccent.bg, padding: '1.5rem',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', gap: '0.5rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', margin: 0 }}>
+                Overall Risk Assessment
+              </p>
+              <span
+                title="Overall Risk Score (0–100): Calculated by evaluating cryptographic parameters (IKE version, DH group, encryption cipher) and payload protection against security rules."
+                style={{ cursor: 'help', display: 'flex', alignItems: 'center' }}
+              >
+                <HelpCircle size={13} style={{ color: 'var(--text-muted)' }} />
+              </span>
+            </div>
+            <div style={{ fontSize: '3.5rem', fontWeight: 800, color: riskAccent.text, lineHeight: 1 }}>
+              {sa?.overall_risk_score ?? 0}
+            </div>
+            <span className={`badge ${rc.badge}`} style={{ fontSize: '0.8rem', padding: '0.3rem 0.875rem' }}>
+              {sa?.risk_level ?? 'Unknown'}
+            </span>
+            {sa?.score_explanation && (
+              <p style={{ fontSize: 11, color: '#64748B', lineHeight: 1.65, marginTop: 4, maxWidth: 220 }}>
+                {sa.score_explanation}
+              </p>
+            )}
+          </div>
+        </div>
 
-      {/* ── Feature 1: ML Traffic Classification & Insights ──────────── */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <SectionHead icon={Cpu} title="ML Confidence + Traffic Insights" />
-        <MLSection
-          ml={ml}
-          distribution={m?.packet_size_distribution}
-          stats={m?.packet_size_stats}
-          beaconing={m?.beaconing_analysis}
-          packets={m?.packets}
-        />
-      </div>
+        {/* Cryptographic Parameters */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <SectionHead icon={Lock} title="Cryptographic Parameters" />
+          <CryptoRow label="Encryption Algorithm"   value={m?.encryption} />
+          <CryptoRow label="Key Exchange (DH Group)" value={m?.key_exchange} />
+          <CryptoRow label="Authentication Method"   value={m?.authentication} />
+          <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 12, paddingTop: 12, borderTop: '1px solid #F1F5F9', lineHeight: 1.65, margin: 0 }}>
+            Values marked "Not Extracted" were not observable. IKE negotiation parameters are only visible if
+            the IKE_SA_INIT exchange is present in the capture.
+          </p>
+        </div>
 
-      {/* ── Feature 2: Packet-Level Forensics ─────────────────────────── */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <SectionHead icon={Binary} title="Packet-Level Forensics" />
-        <PacketForensicsTable
-          packets={m?.packets}
-          totalCount={m?.packet_count}
-        />
+        {/* Evidence-Based Security Findings & Recommendations */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <SectionHead
+            icon={AlertTriangle}
+            title="Evidence-Based Security Findings & Recommendations"
+            action={<span style={{ fontSize: 12, color: '#94A3B8' }}>{sa?.findings?.length ?? 0} finding{sa?.findings?.length !== 1 ? 's' : ''}</span>}
+          />
+
+          {sa?.overall_risk_score === 0 && (
+            <div className="alert-warn" style={{ marginBottom: '1rem', marginTop: '0.5rem' }}>
+              <AlertCircle style={{ width: 13, height: 13, color: '#B45309', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 2 }}>
+                  Risk Score 0 — does not mean the VPN is fully secure
+                </p>
+                <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.6, margin: 0 }}>
+                  A score of 0 means no high-risk values were found among the extractable parameters.{' '}
+                  {sa?.rules_skipped?.length > 0
+                    ? `${sa.rules_skipped.length} rule(s) were skipped because parameters were not visible.`
+                    : 'All observable parameters passed.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {(sa?.findings?.length ?? 0) === 0 ? (
+            <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '1.5rem' }}>No security findings.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', marginTop: '0.75rem' }}>
+              {highF.map((f, i) => <FindingCard key={i} f={f} />)}
+              {infoF.length > 0 && (
+                <>
+                  <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginTop: 8, marginBottom: 0 }}>
+                    Informational & Hardening Observations
+                  </p>
+                  {infoF.map((f, i) => <FindingCard key={`info-${i}`} f={f} />)}
+                </>
+              )}
+            </div>
+          )}
+
+          <AnalysisCoverageSummary evaluated={sa?.rules_evaluated ?? []} skipped={sa?.rules_skipped ?? []} />
+          <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
+        </div>
+
+        {/* Packet-Level Evidence (Forensics Dissection Table) */}
+        <div className="card" style={{ padding: '1.25rem' }}>
+          <SectionHead icon={Binary} title="Packet-Level Evidence & Dissection Forensics" />
+          <PacketForensicsTable
+            packets={m?.packets}
+            totalCount={m?.packet_count}
+          />
+        </div>
+
       </div>
 
     </div>

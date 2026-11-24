@@ -667,209 +667,240 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Top Row: Latest Investigation Snapshot + Telemetry ─────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-        gap: '1.25rem',
-        alignItems: 'stretch',
-      }}>
-        {/* Latest Investigation Snapshot Card */}
-        <LatestInvestigationSnapshot
-          latest={latest}
-          loading={loading}
-          onNavigateUpload={() => navigate('/upload')}
-          onViewAnalysis={(id) => navigate(`/analysis/${id}`)}
-        />
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── UPPER SECTION: Data Visualizations & Telemetry Graphs ───────── */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {!error && history.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <BarChart3 style={{ width: 16, height: 16, color: 'var(--blue)' }} />
+              <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Traffic Visualizations & Cryptographic Telemetry
+              </h2>
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Interactive SOC Analytics</span>
+          </div>
 
-        {/* System Health Panel */}
-        <SystemHealthPanel sysDeps={sysDeps} loading={depsLoading} />
-      </div>
+          {/* 2-Column Balanced Desktop Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gap: '1rem',
+            alignItems: 'stretch',
+          }}>
+            {/* Chart 1 (Main Bar Graph - Visual Prominence): ML Traffic Categories */}
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <Cpu style={{ width: 15, height: 15, color: '#8B5CF6' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      ML Traffic Categories (Main Classifier)
+                    </span>
+                  </div>
+                  <span className="badge badge-ml" style={{ fontSize: 10 }}>Random Forest V2</span>
+                </div>
 
-      {/* ── Threat Breakdown Matrix ──────────────────────────────────────── */}
-      <ThreatMatrix
-        threatCounts={stats?.threat_matrix || {
-          weak_dh: 10,
-          ikev1_aggressive: 0,
-          beaconing: 3,
-          strong_encryption: 9,
-        }}
-        onSelectFilter={() => navigate('/history')}
-      />
+                <div style={{ height: 200, width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={mlChartData} margin={{ top: 10, right: 15, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {mlChartData.map((entry, index) => (
+                          <Cell key={`cell-ml-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-      {/* ── KPI Stats Cards ─────────────────────────────────────────────── */}
-      {!error && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
-          <StatCard
-            icon={BarChart3}
-            label="Total PCAP Analyses"
-            value={loading ? '…' : history.length}
-            sub={history.length > 0 ? 'Stored in local SQLite database' : 'No captures analyzed'}
-            accent="var(--blue)"
-            accentBg="var(--blue-light)"
-          />
-          <StatCard
-            icon={Shield}
-            label="IPsec Captures Detected"
-            value={loading ? '…' : `${agg.ipsecCount} / ${history.length}`}
-            sub="IKE / ESP flows confirmed"
-            accent="var(--blue)"
-            accentBg="var(--blue-light)"
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="High-Risk Findings"
-            value={loading ? '…' : agg.highRiskCount}
-            sub={agg.highRiskCount > 0 ? 'Weak crypto / beaconing detected' : 'Zero critical vulnerabilities'}
-            accent={agg.highRiskCount > 0 ? 'var(--red)' : 'var(--green)'}
-            accentBg={agg.highRiskCount > 0 ? 'var(--red-light)' : 'var(--green-light)'}
-          />
-          <StatCard
-            icon={Cpu}
-            label="ML-Classified Captures"
-            value={loading ? '…' : `${agg.mlCount} / ${history.length}`}
-            sub="Categorized via 500-Tree RF"
-            accent="#8B5CF6"
-            accentBg="rgba(139, 92, 246, 0.08)"
-          />
+              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                Categorized across 500 decision trees via VNAT encrypted flow timing heuristics
+              </div>
+            </div>
+
+            {/* Chart 2: Protocol Distribution (Donut Chart) */}
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <Key style={{ width: 15, height: 15, color: 'var(--blue)' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      IKE Protocol Distribution
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Key Exchange Ratio</span>
+                </div>
+
+                <div style={{ height: 200, width: '100%', position: 'relative' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Tooltip content={<ChartTooltip />} />
+                      <Pie
+                        data={ikeDonutData}
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {ikeDonutData.map((entry, index) => (
+                          <Cell key={`donut-cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+
+                  {/* Center text inside Donut */}
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    pointerEvents: 'none',
+                  }}>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+                      {history.length}
+                    </span>
+                    <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: 2 }}>
+                      Captures
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legend pills */}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                {ikeDonutData.map(d => (
+                  <span key={d.name} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-secondary)' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: d.color }} />
+                    {d.name}: <strong>{d.value}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Chart 3: Analysis Activity Trend (AreaChart) */}
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <Activity style={{ width: 15, height: 15, color: 'var(--blue)' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Analysis Activity Trend
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Daily PCAP Volume</span>
+                </div>
+
+                <div style={{ height: 180, width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={timelineData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--border)' }} />
+                      <Area type="monotone" dataKey="count" stroke="var(--blue)" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 4, fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                Daily capture ingest telemetry and forensic activity over time
+              </div>
+            </div>
+
+            {/* Architecture Diagram: VPN Tunnel Topology */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <TunnelTopologyCard capture={latest} />
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ── Interactive Analytics (Donut + Area Timeline + ML Categories) ─ */}
-      {!error && history.length > 0 && (
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── LOWER SECTION: Written Analysis, Security Findings & Risk ───── */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+          <Shield style={{ width: 16, height: 16, color: 'var(--blue)' }} />
+          <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Written Analysis, Security Findings & Risk Assessment
+          </h2>
+        </div>
+
+        {/* Row 1: Latest Investigation Snapshot + System Health Telemetry */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '1rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1.25rem',
+          alignItems: 'stretch',
         }}>
-          {/* Chart 1: Interactive Donut for IKE Protocols with Center Text */}
-          <div className="card" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Key style={{ width: 15, height: 15, color: 'var(--blue)' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Protocol Distribution
-                </span>
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Key Exchange</span>
-            </div>
-
-            <div style={{ height: 180, width: '100%', position: 'relative' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip content={<ChartTooltip />} />
-                  <Pie
-                    data={ikeDonutData}
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {ikeDonutData.map((entry, index) => (
-                      <Cell key={`donut-cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-
-              {/* Center text inside Donut */}
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
-                  {history.length}
-                </span>
-                <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Captures
-                </span>
-              </div>
-            </div>
-
-            {/* Legend pills */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 4 }}>
-              {ikeDonutData.map(d => (
-                <span key={d.name} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-secondary)' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: d.color }} />
-                  {d.name}: {d.value}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Chart 2: Analysis Activity Over Time (AreaChart) */}
-          <div className="card" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Activity style={{ width: 15, height: 15, color: 'var(--blue)' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Analysis Activity Trend
-                </span>
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Daily Volume</span>
-            </div>
-
-            <div style={{ height: 180, width: '100%' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={timelineData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--border)' }} />
-                  <Area type="monotone" dataKey="count" stroke="var(--blue)" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-              Analysis history telemetry over time
-            </div>
-          </div>
-
-          {/* Chart 3: ML Traffic Categories */}
-          <div className="card" style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Cpu style={{ width: 15, height: 15, color: '#8B5CF6' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  ML Traffic Categories
-                </span>
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Random Forest</span>
-            </div>
-
-            <div style={{ height: 180, width: '100%' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mlChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {mlChartData.map((entry, index) => (
-                      <Cell key={`cell-ml-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-              Traffic type classified via VNAT flow heuristics
-            </div>
-          </div>
+          <LatestInvestigationSnapshot
+            latest={latest}
+            loading={loading}
+            onNavigateUpload={() => navigate('/upload')}
+            onViewAnalysis={(id) => navigate(`/analysis/${id}`)}
+          />
+          <SystemHealthPanel sysDeps={sysDeps} loading={depsLoading} />
         </div>
-      )}
 
-      {/* ── VPN Tunnel Topology Flow Architecture Card ──────────────────── */}
-      {!error && (
-        <TunnelTopologyCard capture={latest} />
-      )}
+        {/* Row 2: Threat Breakdown Matrix */}
+        <ThreatMatrix
+          threatCounts={stats?.threat_matrix || {
+            weak_dh: 10,
+            ikev1_aggressive: 0,
+            beaconing: 3,
+            strong_encryption: 9,
+          }}
+          onSelectFilter={() => navigate('/history')}
+        />
+
+        {/* Row 3: KPI Risk Assessment Stat Cards */}
+        {!error && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
+            <StatCard
+              icon={BarChart3}
+              label="Total PCAP Analyses"
+              value={loading ? '…' : history.length}
+              sub={history.length > 0 ? 'Stored in local SQLite database' : 'No captures analyzed'}
+              accent="var(--blue)"
+              accentBg="var(--blue-light)"
+            />
+            <StatCard
+              icon={Shield}
+              label="IPsec Captures Detected"
+              value={loading ? '…' : `${agg.ipsecCount} / ${history.length}`}
+              sub="IKE / ESP flows confirmed"
+              accent="var(--blue)"
+              accentBg="var(--blue-light)"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="High-Risk Findings"
+              value={loading ? '…' : agg.highRiskCount}
+              sub={agg.highRiskCount > 0 ? 'Weak crypto / beaconing detected' : 'Zero critical vulnerabilities'}
+              accent={agg.highRiskCount > 0 ? 'var(--red)' : 'var(--green)'}
+              accentBg={agg.highRiskCount > 0 ? 'var(--red-light)' : 'var(--green-light)'}
+            />
+            <StatCard
+              icon={Cpu}
+              label="ML-Classified Captures"
+              value={loading ? '…' : `${agg.mlCount} / ${history.length}`}
+              sub="Categorized via 500-Tree RF"
+              accent="#8B5CF6"
+              accentBg="rgba(139, 92, 246, 0.08)"
+            />
+          </div>
+        )}
+      </div>
 
     </div>
   );
