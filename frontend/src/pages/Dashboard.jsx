@@ -816,11 +816,6 @@ export default function Dashboard() {
                 Daily capture ingest telemetry and forensic activity over time
               </div>
             </div>
-
-            {/* Architecture Diagram: VPN Tunnel Topology */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <TunnelTopologyCard capture={latest} />
-            </div>
           </div>
         </div>
       )}
@@ -901,6 +896,15 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── Architecture Process: VPN Tunnel Topology & Cryptographic Flow ─ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {!error && (
+        <div style={{ marginTop: '0.25rem' }}>
+          <TunnelTopologyCard capture={latest} />
+        </div>
+      )}
 
     </div>
   );
