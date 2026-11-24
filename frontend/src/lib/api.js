@@ -5,8 +5,38 @@
 const rawBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 const BASE = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`;
 
+/** Return the stored bearer token, or null if not logged in. */
+export function getToken() {
+  return localStorage.getItem('ipsec_token');
+}
+
+/** Return the stored username, or null. */
+export function getUser() {
+  return localStorage.getItem('ipsec_user');
+}
+
+/** Clear the stored session (logout). */
+export function clearSession() {
+  localStorage.removeItem('ipsec_token');
+  localStorage.removeItem('ipsec_user');
+}
+
 async function request(url, options = {}) {
-  const res = await fetch(url, options);
+  const token = getToken();
+  const headers = {
+    ...(options.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const res = await fetch(url, { ...options, headers });
+
+  // Session expired or token invalid — force logout
+  if (res.status === 401) {
+    clearSession();
+    window.location.href = '/';
+    throw new Error('Session expired. Please log in again.');
+  }
+
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try {
@@ -29,5 +59,9 @@ export const api = {
   stats:      ()     => request(`${BASE}/history/stats`),
   getById:    (id)   => request(`${BASE}/history/${id}`),
   deleteById: (id)   => request(`${BASE}/history/${id}`, { method: 'DELETE' }),
-  reportUrl:  (id)   => `${BASE}/history/${id}/report`,
+  demoAnalyze: ()    => request(`${BASE}/sample/demo-analyze`, { method: 'POST' }),
+  reportUrl:  (id)   => {
+    const token = getToken();
+    return token ? `${BASE}/history/${id}/report?token=${encodeURIComponent(token)}` : `${BASE}/history/${id}/report`;
+  },
 };

@@ -78,6 +78,52 @@ class TestBeaconingDetector(unittest.TestCase):
         res = analyze_beaconing([100.0, 100.0, 100.0, 100.0, 100.0])
         self.assertEqual(res["status"], "insufficient_data")
 
+    def test_small_sample_synthetic_capture_not_high_risk(self):
+        """A minimal 5-packet synthetic capture with fixed intervals must NOT score 100/100 or trigger High Risk."""
+        base_time = 1700000000.0
+        # 5 packets at exact 1.0s intervals (4 intervals, total 4.0s duration)
+        timestamps = [base_time + float(i) for i in range(5)]
+        sizes = [96] * 5
+
+        res = analyze_beaconing(timestamps, sizes, protocols_found=["ESP"])
+
+        self.assertEqual(res["status"], "evaluated")
+        self.assertFalse(res["beacon_detected"])
+        self.assertNotEqual(res["anomaly_score"], 100.0)
+        self.assertLessEqual(res["anomaly_score"], 45.0)
+        self.assertNotEqual(res["anomaly_level"], "HIGH")
+        self.assertTrue(res["is_small_sample"])
+        self.assertEqual(res["confidence_level"], "LOW")
+        self.assertEqual(res["sample_size_intervals"], 4)
+        self.assertAlmostEqual(res["observation_duration_sec"], 4.0, delta=0.1)
+
+    def test_behavioral_indicator_wording(self):
+        """Ensures verdict and insights describe periodicity as a behavioral indicator, not definitive proof of C2."""
+        base_time = 1700000000.0
+        # 20 packets to trigger high regularity
+        timestamps = [base_time + (i * 2.0) for i in range(20)]
+        sizes = [120] * 20
+
+        res = analyze_beaconing(timestamps, sizes, protocols_found=["ESP"])
+
+        self.assertEqual(res["status"], "evaluated")
+        self.assertIn("Behavioral", res["verdict"])
+        # Check insights explicitly state that timing is a behavioral indicator and mention benign keepalives
+        combined_insights = " ".join(res["insights"])
+        self.assertIn("behavioral indicator", combined_insights.lower())
+        self.assertIn("keepalive", combined_insights.lower())
+
+    def test_moderate_sample_size_confidence(self):
+        """A 10-14 packet trace should have moderate confidence and not jump to immediate 100/100."""
+        base_time = 1700000000.0
+        timestamps = [base_time + (i * 3.0) for i in range(12)]
+
+        res = analyze_beaconing(timestamps, protocols_found=["ESP"])
+        self.assertEqual(res["status"], "evaluated")
+        self.assertEqual(res["confidence_level"], "MODERATE")
+        self.assertLess(res["anomaly_score"], 100.0)
+
 
 if __name__ == '__main__':
     unittest.main()
+

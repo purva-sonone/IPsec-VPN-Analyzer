@@ -137,6 +137,239 @@ def _load_model(version: str = 'v1'):
             return None, None
 
 
+# ── Feature Metadata & Explainable AI (XAI) Definitions ───────────────────────
+
+_FEATURE_METADATA = {
+    'out_iat_min': {
+        'name': 'Min Outbound Interval',
+        'unit': 's',
+        'description': 'Smallest observed gap between consecutive outbound packets',
+    },
+    'out_iat_max': {
+        'name': 'Max Outbound Interval',
+        'unit': 's',
+        'description': 'Longest pause observed between outbound transmissions',
+    },
+    'out_iat_mean': {
+        'name': 'Mean Outbound Cadence',
+        'unit': 's',
+        'description': 'Average interval between outgoing packet transmissions',
+    },
+    'out_iat_std_dev': {
+        'name': 'Outbound Timing Jitter / Regularity',
+        'unit': 's',
+        'description': 'Variance in outbound timing; near-zero indicates strict periodicity',
+    },
+    'in_iat_min': {
+        'name': 'Min Inbound Interval',
+        'unit': 's',
+        'description': 'Smallest observed gap between consecutive inbound responses',
+    },
+    'in_iat_max': {
+        'name': 'Max Inbound Interval',
+        'unit': 's',
+        'description': 'Longest pause observed between inbound responses',
+    },
+    'in_iat_mean': {
+        'name': 'Mean Inbound Cadence',
+        'unit': 's',
+        'description': 'Average interval between incoming packet arrivals',
+    },
+    'in_iat_std_dev': {
+        'name': 'Inbound Timing Jitter / Regularity',
+        'unit': 's',
+        'description': 'Variance in inbound timing regularity',
+    },
+    'log_bytes_per_sec': {
+        'name': 'Throughput Density',
+        'unit': 'log B/s',
+        'description': 'Log-scale transfer rate indicating bandwidth consumption',
+    },
+    'log_total_outgoing_packets': {
+        'name': 'Outbound Packet Volume',
+        'unit': 'log pkts',
+        'description': 'Log-scale count of client-to-gateway transmissions',
+    },
+    'log_total_incoming_packets': {
+        'name': 'Inbound Packet Volume',
+        'unit': 'log pkts',
+        'description': 'Log-scale count of gateway-to-client responses',
+    },
+    'flow_iat_min': {
+        'name': 'Min Flow Interval',
+        'unit': 's',
+        'description': 'Smallest interval across entire bidirectional flow',
+    },
+    'flow_iat_max': {
+        'name': 'Max Flow Interval',
+        'unit': 's',
+        'description': 'Longest pause across entire bidirectional session',
+    },
+    'flow_iat_mean': {
+        'name': 'Mean Flow Cadence',
+        'unit': 's',
+        'description': 'Average bidirectional packet arrival rate',
+    },
+    'flow_iat_std_dev': {
+        'name': 'Session Timing Regularity',
+        'unit': 's',
+        'description': 'Overall bidirectional session timing jitter',
+    },
+    'log_total_outgoing_bytes': {
+        'name': 'Outbound Byte Volume',
+        'unit': 'log B',
+        'description': 'Total outbound bytes transferred',
+    },
+    'log_total_incoming_bytes': {
+        'name': 'Inbound Byte Volume',
+        'unit': 'log B',
+        'description': 'Total inbound bytes received',
+    },
+}
+
+
+def _generate_feature_reason(category: str, feature_key: str, value: float) -> str:
+    """Generate concise, domain-grounded explanation of why this feature supports the category."""
+    cat = (category or "").upper()
+    if cat == "C2":
+        if "std_dev" in feature_key:
+            return f"Low arrival jitter ({value:.4f}s) indicates automated scheduled beaconing rather than human behavior."
+        elif "mean" in feature_key:
+            return f"Periodic cadence (~{value:.2f}s) matches persistent implant heartbeat / callback intervals."
+        elif "bytes_per_sec" in feature_key:
+            return f"Low throughput density ({value:.2f}) matches lightweight heartbeat probes rather than bulk data."
+        elif "packet" in feature_key:
+            return f"Asymmetric flow ratio reflects automated client check-ins without heavy downstream media."
+        else:
+            return f"Flow timing parameter ({value:.3f}) strongly aligns with automated C2 beacon profiles."
+    elif cat == "VOIP":
+        if "iat" in feature_key and ("min" in feature_key or "mean" in feature_key):
+            return f"Rapid, steady packet cadence (~{value:.3f}s) matches real-time bidirectional audio packetization."
+        elif "std_dev" in feature_key:
+            return f"Minimal timing jitter ({value:.4f}s) matches fixed-frame voice RTP audio codecs."
+        elif "bytes_per_sec" in feature_key:
+            return f"Steady moderate bandwidth ({value:.2f}) typical of compressed VoIP audio streams."
+        else:
+            return f"Symmetric low-latency characteristics typical of VoIP telephony."
+    elif cat == "STREAMING":
+        if "bytes_per_sec" in feature_key:
+            return f"High sustained throughput density ({value:.2f}) typical of continuous multimedia bitstreams."
+        elif "in_iat" in feature_key or "incoming" in feature_key:
+            return f"Dense incoming packet volume matches video chunk download and media buffer replenishment."
+        else:
+            return f"High-volume downstream flow pattern characteristic of video/audio streaming."
+    elif cat == "FILE_TRANSFER":
+        if "bytes_per_sec" in feature_key or "outgoing" in feature_key or "incoming" in feature_key:
+            return f"High data volume and sustained packet transfer rate typical of bulk file synchronization."
+        elif "min" in feature_key:
+            return f"Near-zero minimum IAT ({value:.4f}s) reflects TCP back-to-back packet burst transmission."
+        else:
+            return f"Bulk transfer characteristics with sustained packet delivery."
+    elif cat == "CHAT":
+        if "max" in feature_key or "std_dev" in feature_key:
+            return f"High inter-arrival variance ({value:.2f}s) reflects sporadic human typing and reading pauses."
+        elif "bytes_per_sec" in feature_key or "packet" in feature_key:
+            return f"Low packet volume with minimal bandwidth consumption typical of instant messaging."
+        else:
+            return f"Sporadic bursts separated by conversational idle pauses characteristic of chat."
+    else:
+        return f"Observed feature value ({value:.3f}) provided strongest statistical attribution toward {category}."
+
+
+def explain_prediction(
+    clf,
+    le,
+    feature_names: list,
+    feature_vector: list,
+    pred_enc: int,
+    predicted_label: str,
+    confidence_score: float,
+) -> dict | None:
+    """
+    Compute local feature attributions using exact tree decision path analysis (TreeInterpreter / Saabas).
+    Identifies the top contributing factors driving the Random Forest model toward the predicted category.
+    """
+    try:
+        import numpy as np
+        x_in = np.array([feature_vector], dtype=np.float32)
+        n_features = len(feature_names)
+        contributions = np.zeros(n_features, dtype=np.float64)
+
+        for tree in clf.estimators_:
+            t = tree.tree_
+            node_indicator = t.decision_path(x_in).toarray()[0]
+            path_nodes = np.where(node_indicator == 1)[0]
+            for i in range(len(path_nodes) - 1):
+                curr_node = path_nodes[i]
+                next_node = path_nodes[i + 1]
+                feature = t.feature[curr_node]
+                if feature >= 0:
+                    s_curr = float(np.sum(t.value[curr_node][0]))
+                    s_next = float(np.sum(t.value[next_node][0]))
+                    if s_curr > 0 and s_next > 0:
+                        val_curr = t.value[curr_node][0] / s_curr
+                        val_next = t.value[next_node][0] / s_next
+                        contributions[feature] += (val_next[pred_enc] - val_curr[pred_enc])
+
+        n_estimators = len(clf.estimators_)
+        if n_estimators > 0:
+            contributions /= n_estimators
+
+        ranked_indices = np.argsort(-contributions)
+        positive_indices = [idx for idx in ranked_indices if contributions[idx] > 0]
+        top_indices = positive_indices[:4] if len(positive_indices) >= 2 else ranked_indices[:3].tolist()
+        total_positive = sum(contributions[i] for i in top_indices if contributions[i] > 0)
+
+        top_factors = []
+        for rank, idx in enumerate(top_indices, start=1):
+            feat_key = feature_names[idx]
+            feat_val = float(feature_vector[idx])
+            contrib = float(contributions[idx])
+            meta = _FEATURE_METADATA.get(feat_key, {
+                'name': feat_key.replace('_', ' ').title(),
+                'unit': '',
+                'description': 'Flow statistical attribute'
+            })
+            unit_str = f" {meta['unit']}" if meta['unit'] else ""
+            if "iat" in feat_key:
+                val_fmt = f"{feat_val:.4f}s"
+            elif "bytes" in feat_key or "packet" in feat_key:
+                val_fmt = f"{feat_val:.2f}{unit_str}"
+            else:
+                val_fmt = f"{feat_val:.3f}{unit_str}"
+
+            impact_pct = float(round((contrib / total_positive) * 100.0, 1)) if total_positive > 0 else float(round(100.0 / len(top_indices), 1))
+
+            top_factors.append({
+                "rank": rank,
+                "feature_key": feat_key,
+                "feature_name": meta["name"],
+                "observed_value": val_fmt,
+                "raw_value": round(feat_val, 4),
+                "attribution_score": round(contrib, 4),
+                "impact_percentage": max(1.0, float(impact_pct)),
+                "reason": _generate_feature_reason(predicted_label, feat_key, feat_val),
+            })
+
+        top_names = [f["feature_name"] for f in top_factors[:2]]
+        summary = (
+            f"Classification as {predicted_label} was primarily driven by "
+            f"{top_names[0]} and {top_names[1]} based on tree decision path analysis."
+            if len(top_names) >= 2 else f"Classification driven by {top_factors[0]['feature_name']}."
+        )
+
+        return {
+            "method": "Exact Tree Decision Path Attribution (TreeInterpreter / Saabas)",
+            "target_category": predicted_label,
+            "confidence_score": confidence_score,
+            "top_contributing_factors": top_factors,
+            "summary": summary,
+        }
+    except Exception as err:
+        logger.warning("Feature attribution failed: %s", err)
+        return None
+
+
 # ── Inference ─────────────────────────────────────────────────────────────────
 
 def predict_traffic_category(pcap_results: dict) -> dict:
@@ -184,6 +417,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
                 "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). "
                 "Predicts traffic category: C2, CHAT, FILE_TRANSFER, STREAMING, VOIP."
             ),
+            "explainability": None,
         }
 
     # ── Select feature schema and model based on MODEL_VERSION ──────────────
@@ -217,6 +451,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "features_available": available_features,
             "features_required_missing": _active_features,
             "model_version": _active_version,
+            "explainability": None,
         }
 
     # ── Check if flow features were extracted ──────────────────────────────
@@ -232,6 +467,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "features_available": available_features,
             "features_required_missing": _active_features,
             "model_version": _active_version,
+            "explainability": None,
         }
 
     # ── Build feature vector ───────────────────────────────────────────────
@@ -248,6 +484,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "features_available": available_features,
             "features_required_missing": missing_features,
             "model_version": _active_version,
+            "explainability": None,
         }
 
     # ── Validate feature values (no NaN/Inf) ──────────────────────────────
@@ -289,6 +526,7 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             "features_available": available_features,
             "features_required_missing": [],
             "model_version": _active_version,
+            "explainability": None,
         }
 
     # ── Add feature availability summary for the UI ────────────────────────
@@ -299,30 +537,25 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         f"Bytes/sec (log): {flow_features.get('log_bytes_per_sec', 0):.2f}",
     ]
 
-    # ── Reliability & False Positive Prevention Guards ─────────────────────
-    # Thresholds:
-    # 1. Minimum packet count: < 30 packets is insufficient for stable IAT distribution
-    # 2. Confidence threshold: < 65% is too ambiguous to claim a definitive category
+    # ── Reliability & Sample Size Indicators ──────────────────────────────
     MIN_PACKETS_THRESHOLD = 30
     MIN_CONFIDENCE_THRESHOLD = 0.65
 
+    # Always output the actual predicted category label from the classifier
+    predicted_category = predicted_label
+
     if packet_count < MIN_PACKETS_THRESHOLD:
-        predicted_category = "Inconclusive (Short Capture)"
         model_note = (
-            f"Capture contains only {packet_count} packet(s). "
-            f"Statistical inter-arrival timing (IAT) requires at least {MIN_PACKETS_THRESHOLD} packets "
-            f"for reliable traffic categorization. Raw statistical inclination ({predicted_label}, "
-            f"{confidence_score*100:.1f}%) withheld to prevent false alarms."
+            f"Capture contains {packet_count} packet(s). "
+            f"Predicted category: {predicted_category} with {confidence_score*100:.1f}% confidence. "
+            f"Note: captures with fewer than {MIN_PACKETS_THRESHOLD} packets have limited statistical sample size."
         )
     elif confidence_score < MIN_CONFIDENCE_THRESHOLD:
-        predicted_category = "Unclassified / Mixed Flow"
         model_note = (
-            f"Classifier confidence ({confidence_score*100:.1f}%) is below the {MIN_CONFIDENCE_THRESHOLD*100:.0f}% "
-            f"reliability threshold. Traffic pattern exhibits mixed characteristics and does not conclusively "
-            f"match a single VNAT category (highest statistical tendency: {predicted_label})."
+            f"Classifier confidence ({confidence_score*100:.1f}%) is below {MIN_CONFIDENCE_THRESHOLD*100:.0f}%. "
+            f"Highest statistical match: {predicted_category}."
         )
     else:
-        predicted_category = predicted_label
         model_note = (
             "Classifier trained on VNAT dataset (MIT Lincoln Laboratory). "
             f"Predicted category: {predicted_category} with {confidence_score*100:.1f}% confidence. "
@@ -333,6 +566,16 @@ def predict_traffic_category(pcap_results: dict) -> dict:
         "98.76% (held-out VNAT test split, deduped, 11 features)"
         if _active_version == 'v2'
         else "98.74% (held-out VNAT test split, 17 features)"
+    )
+
+    explainability = explain_prediction(
+        clf=clf,
+        le=le,
+        feature_names=_active_features,
+        feature_vector=feature_vector,
+        pred_enc=pred_enc,
+        predicted_label=predicted_label,
+        confidence_score=confidence_score,
     )
 
     return {
@@ -351,4 +594,5 @@ def predict_traffic_category(pcap_results: dict) -> dict:
             f"VNAT test-set accuracy: {_accuracy_note}. "
             "Note: held-out VNAT accuracy does not guarantee real-world PCAP accuracy."
         ),
+        "explainability": explainability,
     }

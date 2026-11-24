@@ -300,45 +300,63 @@ def evaluate_security(pcap_results: dict) -> dict:
         jitter = beaconing.get("jitter_sec") or 0.0
         regularity = beaconing.get("timing_regularity_pct", 0.0)
 
-        if is_beacon or anomaly_score >= 68.0:
+        conf_level = beaconing.get("confidence_level", "HIGH" if (is_beacon or anomaly_score >= 68.0) else "MODERATE")
+        intervals_cnt = beaconing.get("sample_size_intervals") or beaconing.get("total_intervals_analyzed") or 0
+        dur_sec = beaconing.get("observation_duration_sec") or 0.0
+        is_small = beaconing.get("is_small_sample", False)
+
+        # High risk finding requires confirmed persistent periodic beaconing without small-sample distortion
+        if (is_beacon or anomaly_score >= 68.0) and not is_small:
+            sample_info = f" across {intervals_cnt} intervals ({dur_sec:.1f}s window)" if intervals_cnt else ""
             findings.append({
                 "title": "Periodic Beaconing Activity Detected",
                 "description": (
-                    f"Traffic exhibits strict periodic timing regularity ({regularity}%) with estimated "
-                    f"beacon interval of ~{interval:.2f}s (Jitter: ±{jitter:.2f}s). "
-                    "This behavior strongly correlates with automated Command & Control (C2) heartbeats "
-                    "or persistent implant callbacks over the encrypted VPN tunnel."
+                    f"Traffic exhibits sustained periodic timing regularity ({regularity}%) with estimated "
+                    f"beacon interval of ~{interval:.2f}s (Jitter: ±{jitter:.2f}s){sample_info}. "
+                    "Note: Transmission periodicity is a behavioral indicator, not definitive proof of malicious activity; "
+                    "benign automated functions (e.g. IPsec Dead Peer Detection, NAT keep-alives, or NTP synchronization) also generate regular cadences. "
+                    "Further correlation with destination IP reputation, endpoint telemetry, and tunnel context is required."
                 ),
                 "severity": "High",
                 "recommendation": (
                     "Investigate endpoints generating regular heartbeat traffic. "
-                    "Correlate destination IPs with threat intelligence feeds and inspect endpoint processes."
+                    "Correlate destination IPs with threat intelligence feeds and confirm whether cadence matches authorized VPN keepalive intervals."
                 ),
-                "evidence": f"Beaconing Anomaly Score: {anomaly_score}/100. Observed Interval: ~{interval:.2f}s.",
+                "evidence": (
+                    f"Beaconing Anomaly Score: {anomaly_score}/100 ({conf_level} confidence). "
+                    f"Observed Interval: ~{interval:.2f}s (±{jitter:.2f}s)"
+                    + (f" across {intervals_cnt} intervals ({dur_sec:.1f}s window)." if intervals_cnt else ".")
+                ),
                 "risk_contribution": 3,
             })
             risk_score += 3
             rules_evaluated.append({
                 "rule": "C2 Beaconing Analysis",
-                "observed_value": f"Periodic Beaconing ({anomaly_score}/100)",
+                "observed_value": f"Periodic Beaconing ({anomaly_score}/100, {conf_level} Conf)",
                 "status": "FAIL",
             })
-        elif anomaly_score >= 40.0:
+        elif anomaly_score >= 40.0 or (is_small and (is_beacon or regularity >= 70.0)):
+            sample_note = f" (Sample size limitation: {intervals_cnt} intervals over {dur_sec:.1f}s)" if is_small else ""
             findings.append({
                 "title": "Semi-Periodic Automated Traffic Observed",
                 "description": (
-                    f"Moderate timing regularity observed ({regularity}%, interval ~{interval:.2f}s). "
-                    "May correspond to routine background synchronization, NTP/DNS keep-alives, or jittered beaconing."
+                    f"Observed timing regularity ({regularity}%, interval ~{interval:.2f}s){sample_note}. "
+                    "Periodic timing is a behavioral indicator that commonly corresponds to routine background keepalives (such as DPD or NAT keepalive), "
+                    "automated synthetic tests, network synchronization, or early jittered telemetry. "
+                    "Current sample size and variance do not support a conclusion of malicious C2 implant activity."
                 ),
                 "severity": "Informational",
-                "recommendation": "Review endpoint scheduled tasks to confirm whether periodic sync is authorized.",
-                "evidence": f"Timing Anomaly Score: {anomaly_score}/100.",
+                "recommendation": "Review endpoint scheduled tasks and VPN keepalive configuration to confirm authorized periodicity.",
+                "evidence": (
+                    f"Timing Anomaly Score: {anomaly_score}/100 ({conf_level} confidence"
+                    + (f", {intervals_cnt} intervals analyzed over {dur_sec:.1f}s)." if intervals_cnt else ").")
+                ),
                 "risk_contribution": 0,
             })
             rules_evaluated.append({
                 "rule": "C2 Beaconing Analysis",
-                "observed_value": f"Semi-Periodic ({anomaly_score}/100)",
-                "status": "REVIEW",
+                "observed_value": f"Semi-Periodic ({anomaly_score}/100, {conf_level} Conf)",
+                "status": "REVIEW" if is_small else "PASS",
             })
         else:
             rules_evaluated.append({

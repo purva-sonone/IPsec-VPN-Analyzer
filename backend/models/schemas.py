@@ -54,6 +54,7 @@ class MLPrediction(BaseModel):
     all_class_probabilities: Optional[dict] = None
     model_version: Optional[str] = None
     dataset_note: Optional[str] = None
+    explainability: Optional[dict] = None
 
 
 class AnalysisReport(BaseModel):

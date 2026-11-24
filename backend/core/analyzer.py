@@ -10,9 +10,12 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 try:
-    from core.beaconing_detector import analyze_beaconing
+    from backend.core.beaconing_detector import analyze_beaconing
 except ImportError:
-    from beaconing_detector import analyze_beaconing
+    try:
+        from core.beaconing_detector import analyze_beaconing
+    except ImportError:
+        from beaconing_detector import analyze_beaconing
 
 logger = logging.getLogger(__name__)
 

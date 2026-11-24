@@ -143,5 +143,72 @@ class TestSecurityRules(unittest.TestCase):
         res = evaluate_security(pcap_results)
         self.assertTrue(any(r["rule"] == "C2 Beaconing Analysis" for r in res["rules_skipped"]))
 
+    def test_beaconing_small_sample_not_high_risk(self):
+        """Synthetic test capture with small sample size must not produce High risk (+3) finding."""
+        pcap_results = {
+            "beaconing_analysis": {
+                "status": "evaluated",
+                "anomaly_score": 35.0,
+                "anomaly_level": "LOW",
+                "beacon_detected": False,
+                "confidence_level": "LOW",
+                "is_small_sample": True,
+                "sample_size_intervals": 4,
+                "observation_duration_sec": 4.0,
+                "estimated_interval_sec": 1.0,
+                "jitter_sec": 0.01,
+                "timing_regularity_pct": 98.0,
+            }
+        }
+        res = evaluate_security(pcap_results)
+        # Risk score must be 0 (no High risk penalty)
+        self.assertEqual(res["overall_risk_score"], 0)
+        self.assertFalse(any(f["title"] == "Periodic Beaconing Activity Detected" for f in res["findings"]))
+        b_rule = next((r for r in res["rules_evaluated"] if r["rule"] == "C2 Beaconing Analysis"), None)
+        self.assertIsNotNone(b_rule)
+        self.assertNotEqual(b_rule["status"], "FAIL")
+
+    def test_beaconing_behavioral_evidence_and_wording(self):
+        """Sustained periodic beaconing finding must include behavioral indicator disclaimer and sample size evidence."""
+        pcap_results = {
+            "beaconing_analysis": {
+                "status": "evaluated",
+                "anomaly_score": 85.0,
+                "anomaly_level": "HIGH",
+                "beacon_detected": True,
+                "confidence_level": "HIGH",
+                "is_small_sample": False,
+                "sample_size_intervals": 24,
+                "observation_duration_sec": 120.0,
+                "estimated_interval_sec": 5.0,
+                "jitter_sec": 0.05,
+                "timing_regularity_pct": 95.0,
+            }
+        }
+        res = evaluate_security(pcap_results)
+        self.assertEqual(res["overall_risk_score"], 3)
+        finding = next((f for f in res["findings"] if f["title"] == "Periodic Beaconing Activity Detected"), None)
+        self.assertIsNotNone(finding)
+        self.assertIn("behavioral indicator", finding["description"].lower())
+        self.assertIn("24 intervals", finding["evidence"])
+        self.assertIn("120.0s", finding["evidence"])
+        self.assertIn("HIGH confidence", finding["evidence"])
+
+    def test_unobservable_crypto_remains_not_extracted(self):
+        """Unobservable parameters remain Not Extracted and rules are skipped, not failed."""
+        pcap_results = {
+            "encryption": "Not Extracted",
+            "key_exchange": "Not Extracted",
+            "authentication": "Not Extracted",
+        }
+        res = evaluate_security(pcap_results)
+        self.assertEqual(res["overall_risk_score"], 0)
+        skipped_rules = [r["rule"] for r in res["rules_skipped"]]
+        self.assertIn("Encryption Algorithm Strength", skipped_rules)
+        self.assertIn("Diffie-Hellman Group Strength", skipped_rules)
+        self.assertIn("Authentication Method", skipped_rules)
+
+
 if __name__ == '__main__':
     unittest.main()
+

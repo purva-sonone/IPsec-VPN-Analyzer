@@ -396,6 +396,41 @@ class TestInvalidRuntimeModelVersion(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# TC-20  Explainable AI (XAI) Tree Decision Path Attribution
+# ---------------------------------------------------------------------------
+
+class TestExplainability(unittest.TestCase):
+    def test_explainability_structure_real_v2(self):
+        """Verify real V2 model generates well-formed XAI attribution."""
+        pcap_results = _esp_pcap_results(_full_v2_features())
+        with patch.dict(os.environ, {'MODEL_VERSION': 'v2'}):
+            result = ml.predict_traffic_category(pcap_results)
+
+        self.assertEqual(result['model_status'], 'trained_model')
+        xai = result.get('explainability')
+        self.assertIsNotNone(xai)
+        self.assertIn('Tree Decision Path', xai['method'])
+        self.assertIn('top_contributing_factors', xai)
+        factors = xai['top_contributing_factors']
+        self.assertGreaterEqual(len(factors), 1)
+
+        first = factors[0]
+        self.assertEqual(first['rank'], 1)
+        self.assertIn('feature_name', first)
+        self.assertIn('observed_value', first)
+        self.assertIn('impact_percentage', first)
+        self.assertIn('reason', first)
+        self.assertGreater(first['impact_percentage'], 0)
+
+    def test_explainability_c2_reason_grounding(self):
+        """Verify feature reason for C2 traffic generates domain-grounded explanation."""
+        reason = ml._generate_feature_reason('C2', 'flow_iat_std_dev', 0.015)
+        self.assertIn('beaconing', reason.lower())
+        self.assertIn('jitter', reason.lower())
+
+
+# ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     unittest.main()
+

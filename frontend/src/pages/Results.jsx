@@ -3,7 +3,7 @@ import {
   Shield, Activity, Lock, Key, ArrowLeft, AlertTriangle,
   CheckCircle, Info, XCircle, Cpu,
   Layers, Wifi, AlertCircle, FlaskConical,
-  SkipForward, ListChecks
+  SkipForward, ListChecks, Sparkles
 } from 'lucide-react';
 
 // ── Severity colour config ────────────────────────────────────────────────────
@@ -249,6 +249,59 @@ function TrafficClassification({ ml }) {
               <div key={cls} className="flex items-center justify-between text-xs bg-slate-100/40 border border-slate-300/40 p-2 rounded-lg">
                 <span className="text-slate-300 font-medium">{cls}</span>
                 <span className="text-slate-400">{(prob * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Explainable AI (XAI) Breakdown */}
+      {ml.explainability && ml.explainability.top_contributing_factors?.length > 0 && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4 space-y-3 mt-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
+                Explainable AI (XAI) — Top Decision Factors
+              </span>
+            </div>
+            <span className="text-xs text-indigo-300 font-medium">
+              Why {predicted_category}?
+            </span>
+          </div>
+
+          {ml.explainability.summary && (
+            <p className="text-xs text-indigo-200/90 leading-relaxed">
+              {ml.explainability.summary}
+            </p>
+          )}
+
+          <div className="space-y-2 pt-1">
+            {ml.explainability.top_contributing_factors.map((factor) => (
+              <div key={factor.rank} className="rounded-lg bg-slate-900/60 border border-slate-700/50 p-2.5 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-[10px]">
+                      {factor.rank}
+                    </span>
+                    <span className="font-semibold text-slate-200">{factor.feature_name}</span>
+                    <span className="font-mono text-[11px] text-teal-400 bg-teal-950/40 px-1.5 py-0.5 rounded border border-teal-800/40">
+                      {factor.observed_value}
+                    </span>
+                  </div>
+                  <span className="font-bold text-indigo-400">
+                    {factor.impact_percentage}% impact
+                  </span>
+                </div>
+                <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full"
+                    style={{ width: `${Math.min(100, factor.impact_percentage)}%` }}
+                  />
+                </div>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  {factor.reason}
+                </p>
               </div>
             ))}
           </div>

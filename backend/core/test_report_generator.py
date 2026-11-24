@@ -239,17 +239,40 @@ class TestPdfReportGeneration(unittest.TestCase):
         self.assertIsInstance(pdf, bytes)
         self.assertTrue(pdf.startswith(b"%PDF-"))
 
-    def test_generate_pdf_not_applicable(self):
-        """Not applicable ML status must generate valid PDF report without inventing a version."""
+    def test_generate_pdf_with_xai(self):
+        """Report generator renders XAI decision factors table when explainability is present."""
         ml = {
-            "model_status": "not_applicable",
-            "predicted_category": "Not Applicable",
-            "model_note": "No ESP packets detected in capture.",
-            "model_version": None,
+            "model_version": "v2",
+            "model_status": "trained_model",
+            "predicted_category": "C2",
+            "confidence_score": 0.91,
+            "explainability": {
+                "method": "Exact Tree Decision Path Attribution (Saabas / TreeInterpreter)",
+                "summary": "Low arrival jitter and fixed periodic cadence drove the prediction toward C2.",
+                "top_contributing_factors": [
+                    {
+                        "rank": 1,
+                        "feature_key": "flow_iat_std_dev",
+                        "feature_name": "Flow IAT Std Dev",
+                        "observed_value": "0.0123s",
+                        "impact_percentage": 48.5,
+                        "reason": "Low arrival jitter indicates automated scheduled beaconing rather than human behavior."
+                    },
+                    {
+                        "rank": 2,
+                        "feature_key": "flow_iat_mean",
+                        "feature_name": "Flow IAT Mean",
+                        "observed_value": "1.0021s",
+                        "impact_percentage": 31.2,
+                        "reason": "Periodic cadence matches persistent implant heartbeat intervals."
+                    }
+                ]
+            }
         }
         pdf = generate_pdf(self._base_report(ml))
         self.assertIsInstance(pdf, bytes)
         self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertTrue(len(pdf) > 2000)
 
 
 class TestRuleAuditColors(unittest.TestCase):
@@ -408,7 +431,64 @@ class TestRuleAuditColors(unittest.TestCase):
         self.assertTrue(pdf.startswith(b"%PDF-"))
         self.assertTrue(len(pdf) > 1000)
 
+    def test_generate_pdf_with_beaconing_and_extracted_packet_count(self):
+        """PDF generation with packet count vs extracted packet count and beaconing timing metrics."""
+        report = {
+            "id": "test-beacon-pdf-id",
+            "filename": "synthetic_test_trace.pcap",
+            "pcap_metrics": {
+                "packet_count": 500,
+                "packets": [{"number": i} for i in range(1, 151)],  # 150 extracted
+                "ike_version": "IKEv2",
+                "protocols_found": ["IKE", "ESP"],
+                "vpn_mode_inferred": "Tunnel",
+                "encryption": "AES-GCM",
+                "key_exchange": "Group 19 (ECP-256)",
+                "authentication": "Pre-Shared Key (PSK)",
+                "beaconing_analysis": {
+                    "status": "evaluated",
+                    "anomaly_score": 82.0,
+                    "anomaly_level": "HIGH",
+                    "beacon_detected": True,
+                    "confidence_level": "HIGH",
+                    "sample_size_intervals": 149,
+                    "observation_duration_sec": 300.0,
+                    "estimated_interval_sec": 2.0,
+                    "jitter_sec": 0.04,
+                    "timing_regularity_pct": 96.0,
+                    "verdict": "High Risk: Periodic Beaconing Detected (Behavioral C2 Indicator)",
+                },
+            },
+            "security_assessment": {
+                "overall_risk_score": 3,
+                "risk_level": "Medium",
+                "score_explanation": "Periodic cadence observed.",
+                "findings": [{
+                    "severity": "High",
+                    "title": "Periodic Beaconing Activity Detected",
+                    "evidence": "Score: 82.0/100 (HIGH confidence, 149 intervals over 300.0s).",
+                    "recommendation": "Investigate endpoint process.",
+                }],
+                "rules_evaluated": [
+                    {"rule": "C2 Beaconing Analysis", "observed_value": "Periodic Beaconing (82.0/100)", "status": "FAIL"},
+                ],
+                "rules_skipped": [],
+            },
+            "ml_prediction": {
+                "model_status": "trained_model",
+                "predicted_category": "C2",
+                "confidence_score": 0.91,
+                "model_version": "v2",
+                "features_available": ["Flow duration", "Total bytes"],
+            },
+        }
+        pdf = generate_pdf(report)
+        self.assertIsInstance(pdf, bytes)
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertTrue(len(pdf) > 1000)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -67,6 +67,62 @@
   --shadow-focus:   0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
+/* ── Dark Theme Tokens ───────────────────────────────────────── */
+:root[data-theme="dark"],
+.dark {
+  /* Page surfaces (Dark navy/charcoal as requested) */
+  --bg-page:        #0B0F19;
+  --bg-card:        #111827;
+  --bg-surface:     #1E293B;
+  --bg-muted:       #1F2937;
+
+  /* Borders */
+  --border:         #334155;
+  --border-muted:   #1E293B;
+
+  /* Typography */
+  --text-primary:   #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted:     #94A3B8;
+  --text-faint:     #64748B;
+
+  /* Blue — Primary / Actions / Navigation */
+  --blue:           #3B82F6;
+  --blue-hover:     #60A5FA;
+  --blue-light:     rgba(59, 130, 246, 0.16);
+  --blue-border:    rgba(59, 130, 246, 0.40);
+  --blue-text:      #93C5FD;
+
+  /* Green — Success / Pass / Informational */
+  --green:          #22C55E;
+  --green-light:    rgba(34, 197, 94, 0.16);
+  --green-border:   rgba(34, 197, 94, 0.40);
+  --green-text:     #86EFAC;
+
+  /* Amber — Warning / Medium risk */
+  --amber:          #F59E0B;
+  --amber-light:    rgba(245, 158, 11, 0.16);
+  --amber-border:   rgba(245, 158, 11, 0.40);
+  --amber-text:     #FDE68A;
+
+  /* Red — High / Critical risk */
+  --red:            #EF4444;
+  --red-light:      rgba(239, 68, 68, 0.16);
+  --red-border:     rgba(239, 68, 68, 0.40);
+  --red-text:       #FCA5A5;
+
+  /* Purple — ML / Classification only */
+  --purple:         #8B5CF6;
+  --purple-light:   rgba(139, 92, 246, 0.16);
+  --purple-border:  rgba(139, 92, 246, 0.40);
+  --purple-text:    #C4B5FD;
+
+  /* Shadow */
+  --shadow-card:    0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:      0 4px 6px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-focus:   0 0 0 3px rgba(59, 130, 246, 0.35);
+}
+
 /* ── Base Reset ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -76,6 +132,12 @@ html {
   -moz-osx-font-smoothing: grayscale;
   color: var(--text-primary);
   background-color: var(--bg-page);
+  color-scheme: light;
+}
+
+html[data-theme="dark"],
+html.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -489,3 +551,74 @@ body {
   flex-direction: column;
   gap: 1.5rem;
 }
+
+/* ── Theme-Aware Overrides (Light & Dark Integration) ──────── */
+.theme-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.theme-surface {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  color: var(--text-secondary);
+}
+
+.theme-text-primary {
+  color: var(--text-primary) !important;
+}
+
+.theme-text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.theme-text-muted {
+  color: var(--text-muted) !important;
+}
+
+.theme-border {
+  border-color: var(--border) !important;
+}
+
+/* Dark mode specific fine-tuning */
+[data-theme="dark"] .bg-white,
+.dark .bg-white {
+  background-color: var(--bg-card) !important;
+}
+
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .bg-slate-100,
+.dark .bg-slate-50,
+.dark .bg-slate-100 {
+  background-color: var(--bg-surface) !important;
+}
+
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-gray-900,
+.dark .text-slate-900,
+.dark .text-gray-900 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-700,
+.dark .text-slate-600,
+.dark .text-slate-700 {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-300,
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: var(--border) !important;
+}
+
+/* Theme Toggle Button hover styles */
+.theme-toggle-btn:hover {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+

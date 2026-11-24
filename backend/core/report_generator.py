@@ -3,7 +3,7 @@ report_generator.py – Generate a professional PDF analysis report using Report
 """
 
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
@@ -117,7 +117,7 @@ def _on_page(canvas, doc):
     canvas.drawString(1.5*cm, h - 0.8*cm, "IPsec VPN Security Analysis Report")
     canvas.setFont("Helvetica", 8)
     canvas.drawRightString(w - 1.5*cm, h - 0.8*cm,
-                           f"Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+                           f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     # Footer
     canvas.setFillColor(SLATE500)
     canvas.setFont("Helvetica", 8)
@@ -271,19 +271,29 @@ def generate_pdf(report: dict) -> bytes:
     story.append(HRFlowable(width="100%", thickness=2, color=INDIGO, spaceAfter=10))
 
     # File info table
-    created = report.get("created_at", datetime.utcnow().isoformat())
+    created = report.get("created_at", datetime.now(timezone.utc).isoformat())
     try:
         dt = datetime.fromisoformat(created)
         created_fmt = dt.strftime("%d %b %Y, %H:%M UTC")
     except Exception:
         created_fmt = created
 
+    pkt_count = m.get("packet_count")
+    extracted_pkts = len(m.get("packets", [])) if isinstance(m.get("packets"), list) else 0
+    if pkt_count is not None:
+        if extracted_pkts > 0 and extracted_pkts < pkt_count:
+            pkt_display = f"{pkt_count} total ({extracted_pkts} forensically extracted)"
+        else:
+            pkt_display = str(pkt_count)
+    else:
+        pkt_display = "—"
+
     info_data = [
         ["Field", "Value"],
         ["Filename",        report.get("filename", "—")],
         ["Analysis ID",     report.get("id", "—")],
         ["Analysis Date",   created_fmt],
-        ["Packet Count",    str(m.get("packet_count", "—"))],
+        ["Packet Count",    pkt_display],
         ["Status",          report.get("status", "—").upper()],
     ]
     story.append(_table(info_data, [5*cm, 12*cm]))
@@ -424,6 +434,24 @@ def generate_pdf(report: dict) -> bytes:
             for cls, p in sorted(proba.items(), key=lambda x: -x[1]):
                 p_data.append([cls, f"{p*100:.1f}%"])
             story.append(_table(p_data, [6*cm, 11*cm]))
+
+        xai = ml.get("explainability")
+        if xai and xai.get("top_contributing_factors"):
+            story.append(Spacer(1, 0.25*cm))
+            story.append(Paragraph("Explainable AI (XAI) — Top Decision Factors", S["h3"]))
+            if xai.get("summary"):
+                story.append(Paragraph(xai["summary"], S["small"]))
+                story.append(Spacer(1, 0.15*cm))
+            xai_data = [["Rank", "Contributing Feature", "Observed Value", "Impact %", "Model Decision Rationale"]]
+            for f in xai["top_contributing_factors"]:
+                xai_data.append([
+                    str(f.get("rank", "")),
+                    f.get("feature_name", ""),
+                    f.get("observed_value", ""),
+                    f"{f.get('impact_percentage', 0.0):.1f}%",
+                    Paragraph(f.get("reason", ""), S["small"]),
+                ])
+            story.append(_table(xai_data, [1.2*cm, 4.2*cm, 2.8*cm, 2.0*cm, 6.8*cm]))
     else:
         story.append(Paragraph(ml.get("model_note", "Classification unavailable."), S["body"]))
 
@@ -433,16 +461,26 @@ def generate_pdf(report: dict) -> bytes:
     ba = m.get("beaconing_analysis")
     if ba and ba.get("status") == "evaluated":
         story.append(Paragraph("Behavioral Timing & Beaconing Analysis", S["h2"]))
-        b_interval = f"{ba.get('estimated_interval_sec')}s" if ba.get('estimated_interval_sec') else "N/A"
-        b_jitter = f"±{ba.get('jitter_sec')}s" if ba.get('jitter_sec') else "N/A"
+        b_interval = f"{ba.get('estimated_interval_sec')}s" if ba.get('estimated_interval_sec') is not None else "N/A"
+        b_jitter = f"±{ba.get('jitter_sec')}s" if ba.get('jitter_sec') is not None else "N/A"
+        b_conf = ba.get('confidence_level', 'MODERATE')
+        intervals_cnt = ba.get('sample_size_intervals', ba.get('total_intervals_analyzed', 0))
+        dur_val = ba.get('observation_duration_sec')
+        sample_str = f"{intervals_cnt} intervals" + (f", {dur_val}s window" if dur_val else "")
         b_data = [
             ["Metric", "Observed Value"],
             ["Beaconing Anomaly Score", f"{ba.get('anomaly_score', 0)}/100 ({ba.get('anomaly_level', 'LOW')})"],
+            ["Confidence & Sample Size", f"{b_conf} confidence ({sample_str})"],
             ["Timing Regularity", f"{ba.get('timing_regularity_pct', 0)}%"],
             ["Estimated Periodicity", f"{b_interval} (Jitter: {b_jitter})"],
             ["Forensic Verdict", Paragraph(ba.get("verdict", "—"), S["body"])],
         ]
         story.append(_table(b_data, [6*cm, 11*cm]))
+        story.append(Spacer(1, 0.2*cm))
+        story.append(Paragraph(
+            "Note: Timing regularity is a behavioral metric. Benign network keepalives (such as DPD or NAT-T) and synthetic test scripts can exhibit periodicity and should not be considered definitive proof of malicious activity.",
+            S["small"]
+        ))
         story.append(Spacer(1, 0.3*cm))
 
     # ── Features used ─────────────────────────────────────────────────────────
@@ -459,6 +497,7 @@ def generate_pdf(report: dict) -> bytes:
         "This report was generated automatically by IPsec VPN Analyzer. "
         "Packet-level analysis is based on observable (unencrypted) IKE negotiation headers. "
         "Parameters marked 'Not Extracted' could not be observed in the provided capture. "
+        "Synthetic or simulated packet captures represent laboratory test scenarios and do not constitute operational enterprise VPN sessions. "
         "ML classification predicts traffic category (C2/Chat/Streaming/etc.), not VPN vs non-VPN.",
         S["small"]
     ))

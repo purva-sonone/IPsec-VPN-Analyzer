@@ -285,13 +285,21 @@ def delete_analysis(analysis_id: str) -> bool:
 
 
 def get_history_stats() -> dict:
-    """Aggregate stats for the dashboard summary cards."""
+    """Aggregate stats for the dashboard summary cards, threat matrix, posture score, and timeline."""
     empty_stats = {
         "total_analyses": 0,
         "ipsec_captures": 0,
         "high_risk": 0,
         "informational": 0,
         "ml_classifications": 0,
+        "posture_score": 100,
+        "threat_matrix": {
+            "weak_dh": 0,
+            "ikev1_aggressive": 0,
+            "beaconing": 0,
+            "strong_encryption": 0,
+        },
+        "activity_timeline": [],
     }
     if not is_db_connected():
         return empty_stats
@@ -310,12 +318,58 @@ def get_history_stats() -> dict:
             ml_done = collection.count_documents({
                 "predicted_category": {"$nin": ["Not Applicable", "Unknown", "", None]}
             })
+
+            docs = list(collection.find({}, {"full_result": 1, "dh_group": 1, "encryption": 1, "vpn_mode": 1, "risk_score": 1, "created_at": 1, "packet_count": 1, "risk_level": 1}))
+            weak_dh = 0
+            ikev1_agg = 0
+            beaconing = 0
+            strong_enc = 0
+            posture_scores = []
+            timeline_map = {}
+
+            for d in docs:
+                res = d.get("full_result", {}) if isinstance(d.get("full_result"), dict) else {}
+                sa = res.get("security_assessment", {})
+                titles = [f.get("title", "") for f in sa.get("findings", [])]
+
+                if any("Weak Diffie-Hellman" in t for t in titles):
+                    weak_dh += 1
+                if any("Aggressive Mode" in t for t in titles) or "Aggressive" in (d.get("vpn_mode") or ""):
+                    ikev1_agg += 1
+                if any(("Periodic Beaconing" in t or "Semi-Periodic" in t or "Periodic C2" in t) for t in titles):
+                    beaconing += 1
+                if any("Strong Encryption" in t for t in titles) or any(s in (d.get("encryption") or "") for s in ("AES-GCM", "AES-CCM", "ChaCha20")):
+                    strong_enc += 1
+
+                rs = d.get("risk_score") if d.get("risk_score") is not None else 0
+                posture_scores.append(max(0, min(100, 100 - (rs * 10))))
+
+                c_date = (d.get("created_at") or "")[:10]
+                if c_date:
+                    if c_date not in timeline_map:
+                        timeline_map[c_date] = {"date": c_date, "count": 0, "packets": 0, "high_risk": 0}
+                    timeline_map[c_date]["count"] += 1
+                    timeline_map[c_date]["packets"] += (d.get("packet_count") or 0)
+                    if d.get("risk_level") in ("High", "Critical"):
+                        timeline_map[c_date]["high_risk"] += 1
+
+            overall_posture = round(sum(posture_scores) / len(posture_scores)) if posture_scores else 100
+            timeline = sorted(timeline_map.values(), key=lambda x: x["date"])
+
             return {
                 "total_analyses": total,
                 "ipsec_captures": ipsec,
                 "high_risk": high,
                 "informational": info,
                 "ml_classifications": ml_done,
+                "posture_score": overall_posture,
+                "threat_matrix": {
+                    "weak_dh": weak_dh,
+                    "ikev1_aggressive": ikev1_agg,
+                    "beaconing": beaconing,
+                    "strong_encryption": strong_enc,
+                },
+                "activity_timeline": timeline,
             }
         except Exception as e:
             logger.error("Error retrieving stats from MongoDB: %s", e)
@@ -339,12 +393,68 @@ def get_history_stats() -> dict:
                 cursor.execute("SELECT COUNT(*) FROM analyses WHERE predicted_category IS NOT NULL AND predicted_category NOT IN ('Not Applicable', 'Unknown', '')")
                 ml_done = cursor.fetchone()[0]
 
+                cursor.execute("""
+                    SELECT id, created_at, packet_count, risk_score, risk_level,
+                           dh_group, encryption, vpn_mode, full_result
+                    FROM analyses
+                    ORDER BY created_at ASC
+                """)
+                rows = cursor.fetchall()
+
+                weak_dh = 0
+                ikev1_agg = 0
+                beaconing = 0
+                strong_enc = 0
+                posture_scores = []
+                timeline_map = {}
+
+                for r in rows:
+                    blob = json.loads(r["full_result"]) if r["full_result"] else {}
+                    sa = blob.get("security_assessment", {})
+                    titles = [f.get("title", "") for f in sa.get("findings", [])]
+
+                    # 1. Weak DH: supported by extracted findings
+                    if any("Weak Diffie-Hellman" in t for t in titles):
+                        weak_dh += 1
+                    # 2. IKEv1 Aggressive Mode
+                    if any("Aggressive Mode" in t for t in titles) or "Aggressive" in (r["vpn_mode"] or ""):
+                        ikev1_agg += 1
+                    # 3. Periodic Beaconing Indicators
+                    if any(("Periodic Beaconing" in t or "Semi-Periodic" in t or "Periodic C2" in t) for t in titles):
+                        beaconing += 1
+                    # 4. Strong Encryption Observed
+                    if any("Strong Encryption" in t for t in titles) or any(s in (r["encryption"] or "") for s in ("AES-GCM", "AES-CCM", "ChaCha20")):
+                        strong_enc += 1
+
+                    rs = r["risk_score"] if r["risk_score"] is not None else 0
+                    posture_scores.append(max(0, min(100, 100 - (rs * 10))))
+
+                    c_date = (r["created_at"] or "")[:10]
+                    if c_date:
+                        if c_date not in timeline_map:
+                            timeline_map[c_date] = {"date": c_date, "count": 0, "packets": 0, "high_risk": 0}
+                        timeline_map[c_date]["count"] += 1
+                        timeline_map[c_date]["packets"] += (r["packet_count"] or 0)
+                        if r["risk_level"] in ("High", "Critical"):
+                            timeline_map[c_date]["high_risk"] += 1
+
+                overall_posture = round(sum(posture_scores) / len(posture_scores)) if posture_scores else 100
+                timeline = sorted(timeline_map.values(), key=lambda x: x["date"])
+
                 return {
                     "total_analyses": total,
                     "ipsec_captures": ipsec,
                     "high_risk": high,
                     "informational": info,
                     "ml_classifications": ml_done,
+                    "posture_score": overall_posture,
+                    "threat_matrix": {
+                        "weak_dh": weak_dh,
+                        "ikev1_aggressive": ikev1_agg,
+                        "beaconing": beaconing,
+                        "strong_encryption": strong_enc,
+                    },
+                    "activity_timeline": timeline,
                 }
         except Exception as e:
             logger.error("Error retrieving stats from SQLite: %s", e)

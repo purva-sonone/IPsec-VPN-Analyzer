@@ -1,13 +1,25 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import routes
+from api.auth_routes import auth_router
 from core.database import init_db
+from core.auth import init_auth_tables
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    init_auth_tables()
+    yield
+
 
 app = FastAPI(
     title="AI-Powered IPsec VPN Protocol Analyzer API",
     description="API for uploading and analyzing IPsec VPN packet captures",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Allow CORS for the React frontend.
@@ -32,11 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(routes.router, prefix="/api")
-
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
+app.include_router(auth_router, prefix="/api")
 
 
 @app.get("/")
