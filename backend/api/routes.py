@@ -118,8 +118,9 @@ async def upload_pcap(file: UploadFile = File(...), user: dict = Depends(require
             "ml_prediction":       ml_prediction,
         }
 
-        # Persist analysis to MongoDB history
-        save_analysis(final_report)
+        # Persist analysis to MongoDB or SQLite with user isolation
+        user_id = user.get("user_id")
+        save_analysis(final_report, user_id=user_id)
 
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -165,7 +166,8 @@ async def analyze_sample_capture(user: dict = Depends(require_auth)):
             "security_assessment": security_assessment,
             "ml_prediction": ml_prediction,
         }
-        save_analysis(final_report)
+        user_id = user.get("user_id")
+        save_analysis(final_report, user_id=user_id)
         return final_report
     except Exception as e:
         logger.error("Sample analysis failed: %s", e)
@@ -182,18 +184,20 @@ async def analyze_sample_capture(user: dict = Depends(require_auth)):
 
 @router.get("/history")
 def list_history(user: dict = Depends(require_auth)):
-    """Return all previous analyses (lightweight – no full result blobs)."""
+    """Return all previous analyses for the authenticated user (lightweight – no full result blobs)."""
+    user_id = user.get("user_id")
     try:
-        return get_all_analyses()
+        return get_all_analyses(user_id=user_id)
     except Exception:
         return []
 
 
 @router.get("/history/stats")
 def history_stats(user: dict = Depends(require_auth)):
-    """Aggregate dashboard statistics."""
+    """Aggregate dashboard statistics for the authenticated user."""
+    user_id = user.get("user_id")
     try:
-        return get_history_stats()
+        return get_history_stats(user_id=user_id)
     except Exception:
         return {
             "total_analyses": 0,
@@ -206,8 +210,9 @@ def history_stats(user: dict = Depends(require_auth)):
 
 @router.get("/history/{analysis_id}")
 def get_history_entry(analysis_id: str, user: dict = Depends(require_auth)):
-    """Return the full analysis result for a single ID."""
-    result = get_analysis_by_id(analysis_id)
+    """Return the full analysis result for a single ID owned by the user."""
+    user_id = user.get("user_id")
+    result = get_analysis_by_id(analysis_id, user_id=user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return result
@@ -215,8 +220,9 @@ def get_history_entry(analysis_id: str, user: dict = Depends(require_auth)):
 
 @router.delete("/history/{analysis_id}")
 def delete_history_entry(analysis_id: str, user: dict = Depends(require_auth)):
-    """Delete a single analysis record."""
-    deleted = delete_analysis(analysis_id)
+    """Delete a single analysis record owned by the user."""
+    user_id = user.get("user_id")
+    deleted = delete_analysis(analysis_id, user_id=user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return {"message": "Deleted successfully"}
@@ -226,8 +232,9 @@ def delete_history_entry(analysis_id: str, user: dict = Depends(require_auth)):
 
 @router.get("/history/{analysis_id}/report")
 def download_report(analysis_id: str, user: dict = Depends(require_auth)):
-    """Generate and stream a PDF report for the given analysis."""
-    result = get_analysis_by_id(analysis_id)
+    """Generate and stream a PDF report for the given analysis owned by the user."""
+    user_id = user.get("user_id")
+    result = get_analysis_by_id(analysis_id, user_id=user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
     try:

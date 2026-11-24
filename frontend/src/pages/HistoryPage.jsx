@@ -242,11 +242,16 @@ export default function HistoryPage() {
               <HistoryIcon style={{ width: 34, height: 34, color: 'var(--text-muted)' }} />
             </div>
             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              {hasFilters ? 'No analysis records match the selected filters.' : 'No analyses recorded yet.'}
+              {hasFilters ? 'No analysis records match the selected filters.' : 'No analyses found. Upload a PCAP file to get started.'}
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
               Upload a PCAP capture to generate security findings and traffic classification.
             </p>
+            {!hasFilters && (
+              <button onClick={() => navigate('/upload')} className="btn-primary" style={{ fontSize: 13, marginTop: 6 }}>
+                Upload PCAP File
+              </button>
+            )}
           </div>
         ) : (
           <>

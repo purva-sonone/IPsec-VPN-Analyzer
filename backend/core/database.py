@@ -59,9 +59,15 @@ def _init_sqlite():
                     risk_level         TEXT,
                     predicted_category TEXT,
                     confidence_score   REAL,
-                    full_result        TEXT NOT NULL
+                    full_result        TEXT NOT NULL,
+                    user_id            INTEGER
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE analyses ADD COLUMN user_id INTEGER;")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_analyses_user_created ON analyses(user_id, created_at DESC);")
             conn.commit()
         db_backend = "sqlite"
         logger.info("Using local SQLite database: %s", SQLITE_DB_PATH)
@@ -111,11 +117,15 @@ def get_db_type() -> str:
     return db_backend or "none"
 
 
-def save_analysis(report: dict):
+def save_analysis(report: dict, user_id: int | None = None):
     """Persist a completed analysis report to MongoDB or SQLite."""
     if not is_db_connected():
         logger.warning("Cannot save analysis: database not initialized.")
         return
+
+    uid = user_id if user_id is not None else report.get("user_id")
+    if uid is not None:
+        report["user_id"] = uid
 
     m   = report.get("pcap_metrics", {})
     sa  = report.get("security_assessment", {})
@@ -141,6 +151,7 @@ def save_analysis(report: dict):
                 "predicted_category": ml.get("predicted_category"),
                 "confidence_score": ml.get("confidence_score"),
                 "full_result": report,
+                "user_id": uid,
             }
             collection.update_one({"id": report["id"]}, {"$set": doc}, upsert=True)
         except Exception as e:
@@ -152,8 +163,9 @@ def save_analysis(report: dict):
                     INSERT INTO analyses (
                         id, filename, created_at, status, packet_count, ike_version,
                         protocols, vpn_mode, encryption, dh_group, authentication,
-                        risk_score, risk_level, predicted_category, confidence_score, full_result
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        risk_score, risk_level, predicted_category, confidence_score, full_result,
+                        user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         filename=excluded.filename,
                         created_at=excluded.created_at,
@@ -169,7 +181,8 @@ def save_analysis(report: dict):
                         risk_level=excluded.risk_level,
                         predicted_category=excluded.predicted_category,
                         confidence_score=excluded.confidence_score,
-                        full_result=excluded.full_result
+                        full_result=excluded.full_result,
+                        user_id=excluded.user_id
                 """, (
                     report["id"],
                     report["filename"],
@@ -187,21 +200,23 @@ def save_analysis(report: dict):
                     ml.get("predicted_category"),
                     ml.get("confidence_score"),
                     json.dumps(report),
+                    uid,
                 ))
                 conn.commit()
         except Exception as e:
             logger.error("Failed to save analysis to SQLite: %s", e)
 
 
-def get_all_analyses() -> list[dict]:
+def get_all_analyses(user_id: int | None = None) -> list[dict]:
     """Return all analyses ordered newest-first (without full_result blob)."""
     if not is_db_connected():
         return []
 
     if db_backend == "mongodb" and collection is not None:
         try:
+            query = {"user_id": user_id} if user_id is not None else {}
             cursor = collection.find(
-                {},
+                query,
                 {"_id": 0, "full_result": 0}
             ).sort("created_at", pymongo.DESCENDING)
             return list(cursor)
@@ -212,14 +227,25 @@ def get_all_analyses() -> list[dict]:
         try:
             with _get_sqlite_conn() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, filename, created_at, status, packet_count,
-                           ike_version, protocols, vpn_mode, encryption, dh_group,
-                           authentication, risk_score, risk_level, predicted_category,
-                           confidence_score
-                    FROM analyses
-                    ORDER BY created_at DESC
-                """)
+                if user_id is not None:
+                    cursor.execute("""
+                        SELECT id, filename, created_at, status, packet_count,
+                               ike_version, protocols, vpn_mode, encryption, dh_group,
+                               authentication, risk_score, risk_level, predicted_category,
+                               confidence_score, user_id
+                        FROM analyses
+                        WHERE user_id = ?
+                        ORDER BY created_at DESC
+                    """, (user_id,))
+                else:
+                    cursor.execute("""
+                        SELECT id, filename, created_at, status, packet_count,
+                               ike_version, protocols, vpn_mode, encryption, dh_group,
+                               authentication, risk_score, risk_level, predicted_category,
+                               confidence_score, user_id
+                        FROM analyses
+                        ORDER BY created_at DESC
+                    """)
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error("Error retrieving analyses from SQLite: %s", e)
@@ -228,14 +254,17 @@ def get_all_analyses() -> list[dict]:
     return []
 
 
-def get_analysis_by_id(analysis_id: str) -> dict | None:
+def get_analysis_by_id(analysis_id: str, user_id: int | None = None) -> dict | None:
     """Return the full result JSON for a single analysis."""
     if not is_db_connected():
         return None
 
     if db_backend == "mongodb" and collection is not None:
         try:
-            doc = collection.find_one({"id": analysis_id}, {"_id": 0, "full_result": 1})
+            query = {"id": analysis_id}
+            if user_id is not None:
+                query["user_id"] = user_id
+            doc = collection.find_one(query, {"_id": 0, "full_result": 1})
             if doc and "full_result" in doc:
                 return doc["full_result"]
             return None
@@ -246,7 +275,10 @@ def get_analysis_by_id(analysis_id: str) -> dict | None:
         try:
             with _get_sqlite_conn() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT full_result FROM analyses WHERE id = ?", (analysis_id,))
+                if user_id is not None:
+                    cursor.execute("SELECT full_result FROM analyses WHERE id = ? AND user_id = ?", (analysis_id, user_id))
+                else:
+                    cursor.execute("SELECT full_result FROM analyses WHERE id = ?", (analysis_id,))
                 row = cursor.fetchone()
                 if row and row["full_result"]:
                     return json.loads(row["full_result"])
@@ -258,14 +290,17 @@ def get_analysis_by_id(analysis_id: str) -> dict | None:
     return None
 
 
-def delete_analysis(analysis_id: str) -> bool:
+def delete_analysis(analysis_id: str, user_id: int | None = None) -> bool:
     """Delete an analysis. Returns True if a document was deleted."""
     if not is_db_connected():
         return False
 
     if db_backend == "mongodb" and collection is not None:
         try:
-            result = collection.delete_one({"id": analysis_id})
+            query = {"id": analysis_id}
+            if user_id is not None:
+                query["user_id"] = user_id
+            result = collection.delete_one(query)
             return result.deleted_count > 0
         except Exception as e:
             logger.error("Error deleting analysis %s from MongoDB: %s", analysis_id, e)
@@ -274,7 +309,10 @@ def delete_analysis(analysis_id: str) -> bool:
         try:
             with _get_sqlite_conn() as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM analyses WHERE id = ?", (analysis_id,))
+                if user_id is not None:
+                    cursor.execute("DELETE FROM analyses WHERE id = ? AND user_id = ?", (analysis_id, user_id))
+                else:
+                    cursor.execute("DELETE FROM analyses WHERE id = ?", (analysis_id,))
                 conn.commit()
                 return cursor.rowcount > 0
         except Exception as e:
@@ -284,7 +322,7 @@ def delete_analysis(analysis_id: str) -> bool:
     return False
 
 
-def get_history_stats() -> dict:
+def get_history_stats(user_id: int | None = None) -> dict:
     """Aggregate stats for the dashboard summary cards, threat matrix, posture score, and timeline."""
     empty_stats = {
         "total_analyses": 0,
@@ -306,20 +344,21 @@ def get_history_stats() -> dict:
 
     if db_backend == "mongodb" and collection is not None:
         try:
-            total = collection.count_documents({})
-            ipsec = collection.count_documents({
-                "$or": [
-                    {"protocols": {"$regex": "IKE"}},
-                    {"protocols": {"$regex": "ESP"}}
-                ]
-            })
-            high = collection.count_documents({"risk_level": {"$in": ["High", "Critical"]}})
-            info = collection.count_documents({"risk_level": "Informational"})
+            u_filter = {"user_id": user_id} if user_id is not None else {}
+            total = collection.count_documents(u_filter)
+            if total == 0:
+                return empty_stats
+
+            ipsec_q = {**u_filter, "$or": [{"protocols": {"$regex": "IKE"}}, {"protocols": {"$regex": "ESP"}}]}
+            ipsec = collection.count_documents(ipsec_q)
+            high = collection.count_documents({**u_filter, "risk_level": {"$in": ["High", "Critical"]}})
+            info = collection.count_documents({**u_filter, "risk_level": "Informational"})
             ml_done = collection.count_documents({
+                **u_filter,
                 "predicted_category": {"$nin": ["Not Applicable", "Unknown", "", None]}
             })
 
-            docs = list(collection.find({}, {"full_result": 1, "dh_group": 1, "encryption": 1, "vpn_mode": 1, "risk_score": 1, "created_at": 1, "packet_count": 1, "risk_level": 1}))
+            docs = list(collection.find(u_filter, {"full_result": 1, "dh_group": 1, "encryption": 1, "vpn_mode": 1, "risk_score": 1, "created_at": 1, "packet_count": 1, "risk_level": 1}))
             weak_dh = 0
             ikev1_agg = 0
             beaconing = 0
@@ -378,27 +417,55 @@ def get_history_stats() -> dict:
         try:
             with _get_sqlite_conn() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM analyses")
-                total = cursor.fetchone()[0]
+                if user_id is not None:
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE user_id = ?", (user_id,))
+                    total = cursor.fetchone()[0]
+                    if total == 0:
+                        return empty_stats
 
-                cursor.execute("SELECT COUNT(*) FROM analyses WHERE protocols LIKE '%IKE%' OR protocols LIKE '%ESP%'")
-                ipsec = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE user_id = ? AND (protocols LIKE '%IKE%' OR protocols LIKE '%ESP%')", (user_id,))
+                    ipsec = cursor.fetchone()[0]
 
-                cursor.execute("SELECT COUNT(*) FROM analyses WHERE risk_level IN ('High', 'Critical')")
-                high = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE user_id = ? AND risk_level IN ('High', 'Critical')", (user_id,))
+                    high = cursor.fetchone()[0]
 
-                cursor.execute("SELECT COUNT(*) FROM analyses WHERE risk_level = 'Informational'")
-                info = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE user_id = ? AND risk_level = 'Informational'", (user_id,))
+                    info = cursor.fetchone()[0]
 
-                cursor.execute("SELECT COUNT(*) FROM analyses WHERE predicted_category IS NOT NULL AND predicted_category NOT IN ('Not Applicable', 'Unknown', '')")
-                ml_done = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE user_id = ? AND predicted_category IS NOT NULL AND predicted_category NOT IN ('Not Applicable', 'Unknown', '')", (user_id,))
+                    ml_done = cursor.fetchone()[0]
 
-                cursor.execute("""
-                    SELECT id, created_at, packet_count, risk_score, risk_level,
-                           dh_group, encryption, vpn_mode, full_result
-                    FROM analyses
-                    ORDER BY created_at ASC
-                """)
+                    cursor.execute("""
+                        SELECT id, created_at, packet_count, risk_score, risk_level,
+                               dh_group, encryption, vpn_mode, full_result
+                        FROM analyses
+                        WHERE user_id = ?
+                        ORDER BY created_at ASC
+                    """, (user_id,))
+                else:
+                    cursor.execute("SELECT COUNT(*) FROM analyses")
+                    total = cursor.fetchone()[0]
+                    if total == 0:
+                        return empty_stats
+
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE protocols LIKE '%IKE%' OR protocols LIKE '%ESP%'")
+                    ipsec = cursor.fetchone()[0]
+
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE risk_level IN ('High', 'Critical')")
+                    high = cursor.fetchone()[0]
+
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE risk_level = 'Informational'")
+                    info = cursor.fetchone()[0]
+
+                    cursor.execute("SELECT COUNT(*) FROM analyses WHERE predicted_category IS NOT NULL AND predicted_category NOT IN ('Not Applicable', 'Unknown', '')")
+                    ml_done = cursor.fetchone()[0]
+
+                    cursor.execute("""
+                        SELECT id, created_at, packet_count, risk_score, risk_level,
+                               dh_group, encryption, vpn_mode, full_result
+                        FROM analyses
+                        ORDER BY created_at ASC
+                    """)
                 rows = cursor.fetchall()
 
                 weak_dh = 0

@@ -670,6 +670,30 @@ export default function Dashboard() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* ── UPPER SECTION: Data Visualizations & Telemetry Graphs ───────── */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {!error && !loading && history.length === 0 && (
+        <div className="card" style={{ padding: '2.5rem 1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'var(--blue-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--blue)' }}>
+            <UploadCloud size={24} />
+          </div>
+          <div style={{ maxWidth: 440 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+              No analyses found
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+              Upload a PCAP file to get started, or try the sample capture to analyze verified IPsec traffic.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button onClick={() => navigate('/upload')} className="btn-primary" style={{ fontSize: 13 }}>
+              <UploadCloud size={15} /> Upload PCAP File
+            </button>
+            <button onClick={handleDemoAnalyze} disabled={demoLoading} className="btn-secondary" style={{ fontSize: 13 }}>
+              <Zap size={14} /> Try Sample Capture
+            </button>
+          </div>
+        </div>
+      )}
+
       {!error && history.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem' }}>
@@ -850,10 +874,10 @@ export default function Dashboard() {
         {/* Row 2: Threat Breakdown Matrix */}
         <ThreatMatrix
           threatCounts={stats?.threat_matrix || {
-            weak_dh: 10,
+            weak_dh: 0,
             ikev1_aggressive: 0,
-            beaconing: 3,
-            strong_encryption: 9,
+            beaconing: 0,
+            strong_encryption: 0,
           }}
           onSelectFilter={() => navigate('/history')}
         />

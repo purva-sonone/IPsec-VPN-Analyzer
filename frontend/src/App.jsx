@@ -336,11 +336,11 @@ function App() {
     );
   }
 
-  // Logged in → show full app
+  // Logged in → show full app (key={username} ensures complete state reset on account change)
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <AppShell username={username} onLogout={handleLogout} />
+        <AppShell key={username} username={username} onLogout={handleLogout} />
       </BrowserRouter>
     </ThemeProvider>
   );
