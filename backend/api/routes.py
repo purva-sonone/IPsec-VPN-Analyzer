@@ -10,6 +10,7 @@ from core.analyzer import analyze_pcap, get_tshark_info
 from core.security_rules import evaluate_security
 from core.ml_model import predict_traffic_category
 from core.database import save_analysis, get_all_analyses, get_analysis_by_id, delete_analysis, get_history_stats, collection as db_collection
+from core.timeline import build_forensics_timeline
 from core.report_generator import generate_pdf
 from models.schemas import AnalysisReport
 from api.auth_routes import require_auth
@@ -215,6 +216,12 @@ def get_history_entry(analysis_id: str, user: dict = Depends(require_auth)):
     result = get_analysis_by_id(analysis_id, user_id=user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    pm = result.get("pcap_metrics")
+    if isinstance(pm, dict) and not pm.get("forensics_timeline") and pm.get("packets"):
+        pm["forensics_timeline"] = build_forensics_timeline(
+            pm.get("packets"),
+            pm.get("ike_version", "Unknown"),
+        )
     return result
 
 

@@ -7,15 +7,19 @@ import logging
 import time
 import math
 import sys
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 try:
     from backend.core.beaconing_detector import analyze_beaconing
+    from backend.core.timeline import build_forensics_timeline
 except ImportError:
     try:
         from core.beaconing_detector import analyze_beaconing
+        from core.timeline import build_forensics_timeline
     except ImportError:
         from beaconing_detector import analyze_beaconing
+        from timeline import build_forensics_timeline
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +452,8 @@ def _run_pyshark_sync(file_path: str) -> dict:
         "flow_features": None,
         # Packet-level forensics table records
         "packets": [],
+        # Chronological network forensics timeline
+        "forensics_timeline": [],
         # Packet-size distribution histogram and metrics
         "packet_size_distribution": [],
         "packet_size_stats": {
@@ -553,6 +559,8 @@ def _run_pyshark_sync(file_path: str) -> dict:
                         proto_name = "ESP"
                     elif 'ISAKMP' in pkt or hasattr(pkt, 'isakmp'):
                         proto_name = "IKE"
+                    elif 'DNS' in pkt or hasattr(pkt, 'dns'):
+                        proto_name = "DNS"
                     elif hasattr(pkt, 'tcp'):
                         proto_name = "TCP"
                     elif hasattr(pkt, 'udp'):
@@ -588,9 +596,28 @@ def _run_pyshark_sync(file_path: str) -> dict:
                         et_int = int(et) if et and et.isdigit() else None
                         et_name = _IKE_EXCHANGE_NAMES.get(et_int, f"Type {et}" if et else "Negotiation")
                         msg_id = _safe_get(pkt.isakmp, 'messageid', reject_zero=False)
+                        resp_flag = _safe_get(pkt.isakmp, 'flags_response', 'ikev2_flags_response', reject_zero=False)
+                        ike_is_resp = None
+                        if resp_flag is not None:
+                            ike_is_resp = str(resp_flag).lower() in ('1', 'true', 'yes')
                         details["ike_exchange"] = et_name
                         details["ike_msg_id"] = str(msg_id) if msg_id else None
+                        if ike_is_resp is not None:
+                            details["ike_is_response"] = ike_is_resp
                         info_str = f"IKE: {et_name} (MsgID: {msg_id or '0'})"
+                    elif proto_name == "DNS" and hasattr(pkt, 'dns'):
+                        qname = _safe_get(pkt.dns, 'qry_name')
+                        resp_flag = _safe_get(pkt.dns, 'flags_response', reject_zero=False)
+                        dns_is_resp = None
+                        if resp_flag is not None:
+                            dns_is_resp = str(resp_flag).lower() in ('1', 'true', 'yes')
+                        details["dns_query"] = qname
+                        if dns_is_resp is not None:
+                            details["dns_is_response"] = dns_is_resp
+                        if dns_is_resp:
+                            info_str = f"DNS Response{f': {qname}' if qname else ''}"
+                        else:
+                            info_str = f"DNS Query{f': {qname}' if qname else ''}"
                     elif src_port and dst_port:
                         info_str = f"{proto_name} Port {src_port} → {dst_port}"
                     else:
@@ -598,10 +625,13 @@ def _run_pyshark_sync(file_path: str) -> dict:
 
                     first_ts = _pkt_timestamps[0] if _pkt_timestamps else (pkt_ts or 0)
                     rel_time = f"+{(pkt_ts - first_ts):.4f}s" if (pkt_ts is not None and first_ts is not None) else f"pkt #{results['packet_count']}"
+                    utc_time = datetime.fromtimestamp(pkt_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " UTC" if pkt_ts is not None else None
 
                     results["packets"].append({
                         "number": results["packet_count"],
                         "timestamp": rel_time,
+                        "epoch_ts": round(pkt_ts, 6) if pkt_ts is not None else None,
+                        "utc_time": utc_time,
                         "src_ip": src_ip,
                         "dst_ip": dst_ip,
                         "protocol": proto_name,
@@ -728,6 +758,12 @@ def _run_pyshark_sync(file_path: str) -> dict:
         # of Tunnel Mode. Transport Mode shows ESP nested inside original IP.
         if "ESP" in results["protocols_found"]:
             results["vpn_mode_inferred"] = "Tunnel (Inferred — ESP detected as outer layer)"
+
+        # Build chronological Network Forensics Timeline from real extracted packets
+        results["forensics_timeline"] = build_forensics_timeline(
+            results.get("packets"),
+            results.get("ike_version", "Unknown"),
+        )
 
     except pyshark.tshark.tshark.TSharkNotFoundException:
         raise FileNotFoundError(

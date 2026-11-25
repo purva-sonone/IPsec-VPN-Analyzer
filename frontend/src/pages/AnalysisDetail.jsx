@@ -4,7 +4,8 @@ import {
   ArrowLeft, Download, Shield, Activity, Lock, Key, Wifi,
   AlertTriangle, CheckCircle, XCircle, Info, Cpu, FlaskConical,
   SkipForward, ListChecks, AlertCircle, Layers, RefreshCw,
-  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch, Radio, Sparkles, HelpCircle, FileText
+  Search, ChevronDown, ChevronRight, BarChart3, Binary, Wrench, FileSearch, Radio, Sparkles, HelpCircle, FileText,
+  Clock, ArrowUpDown, Globe, ExternalLink
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer
@@ -965,11 +966,363 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
   );
 }
 
+// ── Network Forensics Timeline ─────────────────────────────────────────────
+function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket }) {
+  const [filterProto, setFilterProto] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder]     = useState('oldest'); // 'oldest' | 'newest'
+  const [expandedId, setExpandedId]   = useState(null);
+
+  const availableProtos = useMemo(() => {
+    const base = ['ALL', 'IKE', 'ESP', 'DNS', 'TCP', 'UDP'];
+    const extras = new Set();
+    (events || []).forEach(e => {
+      const p = (e.protocol || '').toUpperCase();
+      if (p && !base.includes(p)) extras.add(p);
+    });
+    return [...base, ...Array.from(extras)];
+  }, [events]);
+
+  const filteredAndSorted = useMemo(() => {
+    if (!events || events.length === 0) return [];
+    const q = searchQuery.trim().toLowerCase();
+    const list = events.filter(evt => {
+      const matchProto = filterProto === 'ALL' || (evt.protocol || '').toUpperCase() === filterProto;
+      const matchSearch =
+        !q ||
+        evt.src_ip?.toLowerCase().includes(q) ||
+        evt.dst_ip?.toLowerCase().includes(q) ||
+        evt.description?.toLowerCase().includes(q) ||
+        evt.event_type?.toLowerCase().includes(q) ||
+        evt.protocol?.toLowerCase().includes(q) ||
+        String(evt.packet_number).includes(q);
+      return matchProto && matchSearch;
+    });
+    return sortOrder === 'newest' ? [...list].reverse() : list;
+  }, [events, filterProto, searchQuery, sortOrder]);
+
+  const eventStyle = (proto) => {
+    switch ((proto || '').toUpperCase()) {
+      case 'IKE':
+      case 'ISAKMP':
+        return { color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE', dot: '#2563EB', Icon: Key };
+      case 'ESP':
+        return { color: '#7E22CE', bg: '#F3E8FF', border: '#E9D5FF', dot: '#9333EA', Icon: Lock };
+      case 'DNS':
+        return { color: '#0F766E', bg: '#F0FDFA', border: '#99F6E4', dot: '#0D9488', Icon: Globe };
+      case 'TCP':
+        return { color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0', dot: '#16A34A', Icon: Activity };
+      case 'UDP':
+        return { color: '#B45309', bg: '#FFFBEB', border: '#FDE68A', dot: '#D97706', Icon: Wifi };
+      default:
+        return { color: '#475569', bg: '#F1F5F9', border: '#E2E8F0', dot: '#64748B', Icon: Radio };
+    }
+  };
+
+  if (!events || events.length === 0) {
+    return (
+      <div style={{
+        padding: '2rem 1.25rem',
+        textAlign: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 8,
+        border: '1px dashed #CBD5E1',
+      }}>
+        <Clock style={{ width: 22, height: 22, color: '#94A3B8', margin: '0 auto 8px' }} />
+        <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', margin: '0 0 4px' }}>
+          No timeline events available
+        </p>
+        <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>
+          Upload and analyze a valid PCAP capture to view the chronological sequence of network events.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      {/* Controls: Search, Protocol Filter, Sort Toggle */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative' }}>
+            <Search style={{ width: 13, height: 13, color: '#94A3B8', position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Search IP, event, or pkt #..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                fontSize: 12, padding: '4px 10px 4px 28px', borderRadius: 6,
+                border: '1px solid #CBD5E1', outline: 'none', width: 205,
+              }}
+            />
+          </div>
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} style={{ fontSize: 11, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer' }}>
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            {availableProtos.map(proto => (
+              <button
+                key={proto}
+                onClick={() => setFilterProto(proto)}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
+                  border: filterProto === proto ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                  backgroundColor: filterProto === proto ? '#EFF6FF' : '#FFFFFF',
+                  color: filterProto === proto ? '#1D4ED8' : '#64748B',
+                  cursor: 'pointer',
+                }}>
+                {proto}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSortOrder(o => o === 'oldest' ? 'newest' : 'oldest')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 4,
+              border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#334155',
+              cursor: 'pointer',
+            }}
+            title="Toggle chronological sort order"
+          >
+            <ArrowUpDown style={{ width: 12, height: 12, color: '#2563EB' }} />
+            {sortOrder === 'oldest' ? 'Oldest → Newest' : 'Newest → Oldest'}
+          </button>
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748B', flexWrap: 'wrap', gap: 6 }}>
+        <span>
+          Showing {filteredAndSorted.length} of {events.length} timeline events
+          {totalCount > events.length && ` (from ${totalCount} total packets)`}
+        </span>
+        <span style={{ fontStyle: 'italic', color: '#94A3B8' }}>
+          Click an event to expand details or inspect its packet
+        </span>
+      </div>
+
+      {/* Vertical Chronological Timeline */}
+      {filteredAndSorted.length === 0 ? (
+        <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748B', fontSize: 12, backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+          No timeline events match the current search or protocol filter.
+        </div>
+      ) : (
+        <div style={{
+          maxHeight: 460,
+          overflowY: 'auto',
+          paddingRight: 4,
+          borderRadius: 8,
+          border: '1px solid #E2E8F0',
+          backgroundColor: '#FAFBFC',
+          padding: '1rem',
+        }}>
+          <div style={{ position: 'relative', paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {/* Vertical Spine */}
+            <div style={{
+              position: 'absolute',
+              left: 9,
+              top: 10,
+              bottom: 10,
+              width: 2,
+              backgroundColor: '#E2E8F0',
+            }} />
+
+            {filteredAndSorted.map((evt) => {
+              const st = eventStyle(evt.protocol);
+              const ProtoIcon = st.Icon;
+              const isExpanded = expandedId === evt.event_id;
+              const det = evt.details || {};
+              const isInferred = evt.observation_type === 'Inferred';
+
+              return (
+                <div key={evt.event_id} style={{ position: 'relative' }}>
+                  {/* Timeline Node Dot */}
+                  <div style={{
+                    position: 'absolute',
+                    left: -21,
+                    top: 12,
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    backgroundColor: '#FFFFFF',
+                    border: `2.5px solid ${st.dot}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                  }} />
+
+                  {/* Compact Event Card */}
+                  <div
+                    onClick={() => setExpandedId(isExpanded ? null : evt.event_id)}
+                    style={{
+                      borderRadius: 8,
+                      border: isExpanded ? `1px solid ${st.dot}` : '1px solid #E2E8F0',
+                      backgroundColor: '#FFFFFF',
+                      padding: '0.625rem 0.875rem',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                          backgroundColor: st.bg, color: st.color, border: `1px solid ${st.border}`,
+                        }}>
+                          <ProtoIcon style={{ width: 11, height: 11 }} />
+                          {evt.protocol}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
+                          {evt.event_type}
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 9999,
+                          backgroundColor: isInferred ? '#FFFBEB' : '#F0FDF4',
+                          color: isInferred ? '#B45309' : '#15803D',
+                          border: `1px solid ${isInferred ? '#FDE68A' : '#BBF7D0'}`,
+                        }}>
+                          {evt.observation_type || 'Observed'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
+                        {evt.relative_time && evt.timestamp !== evt.relative_time && (
+                          <span style={{ color: '#94A3B8' }}>{evt.relative_time}</span>
+                        )}
+                        <span style={{ fontWeight: 600, color: '#334155' }}>{evt.timestamp}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: 4 }}>
+                          #{evt.packet_number}
+                        </span>
+                        {isExpanded
+                          ? <ChevronDown style={{ width: 13, height: 13, color: '#2563EB' }} />
+                          : <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                      <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                        {evt.description}
+                      </p>
+                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748B' }}>
+                        {evt.src_ip}{evt.src_port ? `:${evt.src_port}` : ''} → {evt.dst_ip}{evt.dst_port ? `:${evt.dst_port}` : ''}
+                      </span>
+                    </div>
+
+                    {/* Expandable Event Details */}
+                    {isExpanded && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          marginTop: '0.625rem',
+                          paddingTop: '0.625rem',
+                          borderTop: '1px solid #F1F5F9',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 6,
+                          fontSize: 11,
+                        }}
+                      >
+                        {evt.observation_note && (
+                          <div style={{ color: '#92400E', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 4, padding: '4px 8px' }}>
+                            {evt.observation_note}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.5rem' }}>
+                          <div>
+                            <span style={{ color: '#64748B', fontWeight: 600 }}>Packet Size: </span>
+                            <span style={{ color: '#0F172A' }}>{evt.length} bytes</span>
+                          </div>
+                          {det.ike_exchange && (
+                            <div>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>IKE Exchange: </span>
+                              <span style={{ color: '#1D4ED8', fontWeight: 600 }}>{det.ike_exchange}</span>
+                            </div>
+                          )}
+                          {det.ike_msg_id != null && (
+                            <div>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>Message ID: </span>
+                              <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.ike_msg_id}</span>
+                            </div>
+                          )}
+                          {det.esp_spi && (
+                            <div>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>ESP SPI: </span>
+                              <span style={{ fontFamily: 'monospace', color: '#7E22CE', fontWeight: 600 }}>{det.esp_spi}</span>
+                            </div>
+                          )}
+                          {det.esp_seq && (
+                            <div>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>ESP Seq: </span>
+                              <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.esp_seq}</span>
+                            </div>
+                          )}
+                          {det.dns_query && (
+                            <div>
+                              <span style={{ color: '#64748B', fontWeight: 600 }}>DNS Query: </span>
+                              <span style={{ fontFamily: 'monospace', color: '#0F766E' }}>{det.dns_query}</span>
+                            </div>
+                          )}
+                        </div>
+                        {det.layers && det.layers.length > 0 && (
+                          <div>
+                            <span style={{ color: '#64748B', fontWeight: 600 }}>Layers: </span>
+                            <span style={{ color: '#0F172A', fontWeight: 500 }}>{det.layers.join(' ➔ ')}</span>
+                          </div>
+                        )}
+                        {onInspectPacket && (
+                          <div style={{ marginTop: 2 }}>
+                            <button
+                              type="button"
+                              onClick={() => onInspectPacket(evt.packet_number)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 5,
+                                fontSize: 11, fontWeight: 600, color: '#2563EB',
+                                backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
+                                borderRadius: 5, padding: '3px 9px', cursor: 'pointer',
+                              }}
+                            >
+                              <ExternalLink style={{ width: 11, height: 11 }} />
+                              Inspect Packet #{evt.packet_number} in Forensics Table
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Packet-Level Forensics Table ───────────────────────────────────────────
-function PacketForensicsTable({ packets = [], totalCount = 0 }) {
+function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumber = null }) {
   const [filterProto, setFilterProto] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
+
+  useEffect(() => {
+    if (selectedPacketNumber != null) {
+      setFilterProto('ALL');
+      setSearchQuery('');
+      setExpandedRow(selectedPacketNumber);
+    }
+  }, [selectedPacketNumber]);
 
   const toggleRow = (num) => {
     setExpandedRow(expandedRow === num ? null : num);
@@ -1216,6 +1569,7 @@ export default function AnalysisDetail() {
   const [result, setResult] = useState(location.state?.result || null);
   const [loading, setLoading] = useState(!result);
   const [error,   setError]   = useState(null);
+  const [selectedPacketNumber, setSelectedPacketNumber] = useState(null);
 
   useEffect(() => {
     if (!result && id) {
@@ -1438,12 +1792,31 @@ export default function AnalysisDetail() {
           <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
         </div>
 
-        {/* Packet-Level Evidence (Forensics Dissection Table) */}
+        {/* Network Forensics Timeline */}
         <div className="card" style={{ padding: '1.25rem' }}>
+          <SectionHead
+            icon={Clock}
+            title="Network Forensics Timeline"
+            action={<span style={{ fontSize: 12, color: '#94A3B8' }}>Chronological Event Sequence</span>}
+          />
+          <NetworkForensicsTimeline
+            events={m?.forensics_timeline}
+            totalCount={m?.packet_count}
+            onInspectPacket={(pktNum) => {
+              setSelectedPacketNumber(pktNum);
+              const el = document.getElementById('packet-forensics-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          />
+        </div>
+
+        {/* Packet-Level Evidence (Forensics Dissection Table) */}
+        <div id="packet-forensics-section" className="card" style={{ padding: '1.25rem' }}>
           <SectionHead icon={Binary} title="Packet-Level Evidence & Dissection Forensics" />
           <PacketForensicsTable
             packets={m?.packets}
             totalCount={m?.packet_count}
+            selectedPacketNumber={selectedPacketNumber}
           />
         </div>
 
