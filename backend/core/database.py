@@ -8,7 +8,9 @@ Supports:
 """
 
 import os
+import re
 import json
+import hashlib
 import sqlite3
 import logging
 from datetime import datetime
@@ -528,3 +530,282 @@ def get_history_stats(user_id: int | None = None) -> dict:
             return empty_stats
 
     return empty_stats
+
+
+def _infer_affected_parameter(title: str, evidence: str = "") -> str:
+    """Derive a concise affected parameter label from finding title/evidence."""
+    text = f"{title} {evidence}".lower()
+    if "ikev1" in text or "ikev2" in text or "ike version" in text or "aggressive" in text:
+        return "IKE Version / Mode"
+    if "diffie-hellman" in text or "dh group" in text or "modp" in text or "ecp-" in text:
+        return "Diffie-Hellman Group"
+    if "encryption" in text or "cipher" in text or "aes" in text or "des" in text or "null" in text:
+        return "Encryption Algorithm"
+    if "authentication" in text or "psk" in text or "pre-shared" in text:
+        return "Authentication Method"
+    if "esp" in text or "payload" in text:
+        return "ESP Payload Protection"
+    if "beacon" in text or "c2" in text or "periodic" in text or "interval" in text:
+        return "Flow Timing / Beaconing"
+    return "IPsec Configuration"
+
+
+def _make_deterministic_finding_id(
+    analysis_id: str,
+    rule_or_title: str,
+    affected_parameter: str,
+    evidence: str = "",
+) -> str:
+    """
+    Generate a deterministic, order-independent Finding ID from stable identity
+    fields (analysis_id, rule_id/title, affected_parameter, evidence).
+    Never uses random values, timestamps, or list indices.
+    """
+    clean_aid = re.sub(r"[^A-Za-z0-9]", "", str(analysis_id or "UNK"))[:6].upper() or "UNK"
+    raw_key = f"{analysis_id}|{rule_or_title}|{affected_parameter}|{evidence}"
+    digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:6].upper()
+    return f"FND-{clean_aid}-{digest}"
+
+
+def _build_soc_feed_from_records(records: list[dict]) -> dict:
+    """
+    Shared extraction helper for SQLite and MongoDB records.
+    Extracts only real findings, behavioral anomalies, and advisor context
+    without exposing full_result blobs.
+
+    - `findings`: security rule findings only.
+    - `anomalies`: behavioral anomalies from beaconing_detector.py only.
+    """
+    findings: list[dict] = []
+    anomalies: list[dict] = []
+    risk_summaries: list[dict] = []
+    skipped_rules: list[dict] = []
+    ml_explanations: list[dict] = []
+    beaconing_summaries: list[dict] = []
+
+    for rec in records:
+        analysis_id = rec.get("id") or ""
+        filename = rec.get("filename") or "Unknown"
+        created_at = rec.get("created_at") or ""
+        blob = rec.get("full_result")
+        if isinstance(blob, str):
+            try:
+                blob = json.loads(blob)
+            except Exception:
+                blob = {}
+        if not isinstance(blob, dict):
+            blob = {}
+
+        sa = blob.get("security_assessment") if isinstance(blob.get("security_assessment"), dict) else {}
+        pm = blob.get("pcap_metrics") if isinstance(blob.get("pcap_metrics"), dict) else {}
+        ml = blob.get("ml_prediction") if isinstance(blob.get("ml_prediction"), dict) else {}
+
+        # ── 1. Security Rule Findings Only ───────────────────────────────────
+        raw_findings = sa.get("findings") if isinstance(sa.get("findings"), list) else []
+        seen_id_counts: dict[str, int] = {}
+        for f in raw_findings:
+            if not isinstance(f, dict):
+                continue
+            title = f.get("title") or "Security Finding"
+            severity = f.get("severity") or "Informational"
+            evidence = f.get("evidence") or ""
+            risk_contrib = f.get("risk_contribution") or 0
+            rule_ref = f.get("rule_id") or title
+            affected_param = _infer_affected_parameter(title, evidence)
+
+            base_id = _make_deterministic_finding_id(
+                analysis_id=analysis_id,
+                rule_or_title=rule_ref,
+                affected_parameter=affected_param,
+                evidence=evidence,
+            )
+            seen_id_counts[base_id] = seen_id_counts.get(base_id, 0) + 1
+            finding_id = base_id if seen_id_counts[base_id] == 1 else f"{base_id}-{seen_id_counts[base_id]}"
+
+            status = "Action Required" if (severity in ("Critical", "High", "Medium", "Low") or risk_contrib > 0) else "Informational"
+            obs_type = "Inferred" if "inferred" in evidence.lower() else "Observed"
+
+            findings.append({
+                "finding_id": finding_id,
+                "analysis_id": analysis_id,
+                "filename": filename,
+                "created_at": created_at,
+                "title": title,
+                "description": f.get("description") or "",
+                "severity": severity,
+                "status": status,
+                "observation_type": obs_type,
+                "affected_parameter": affected_param,
+                "evidence": evidence,
+                "recommendation": f.get("recommendation") or "",
+                "risk_contribution": risk_contrib,
+            })
+
+        # ── 2. Behavioral Anomalies Only (from beaconing_detector.py) ────────
+        beaconing = pm.get("beaconing_analysis") if isinstance(pm.get("beaconing_analysis"), dict) else None
+        if beaconing:
+            b_status = beaconing.get("status")
+            b_score = beaconing.get("anomaly_score")
+            b_level = (beaconing.get("anomaly_level") or "LOW").upper()
+            b_detected = bool(beaconing.get("beacon_detected"))
+
+            if b_status != "insufficient_data":
+                beaconing_summaries.append({
+                    "analysis_id": analysis_id,
+                    "filename": filename,
+                    "created_at": created_at,
+                    "verdict": beaconing.get("verdict") or "",
+                    "anomaly_score": b_score,
+                    "anomaly_level": b_level,
+                    "beacon_detected": b_detected,
+                    "confidence_level": beaconing.get("confidence_level") or "LOW",
+                    "estimated_interval_sec": beaconing.get("estimated_interval_sec"),
+                    "jitter_sec": beaconing.get("jitter_sec"),
+                    "explanation": beaconing.get("explanation") or "",
+                    "insights": beaconing.get("insights") or [],
+                })
+
+            # Align strictly with beaconing_detector.py semantics:
+            # HIGH (score >= 68, not small sample -> beacon_detected=True) or
+            # ELEVATED (score >= 40, semi-periodic / moderate timing anomaly).
+            if b_status != "insufficient_data" and (b_detected or b_level in ("HIGH", "ELEVATED")):
+                sev = "High" if (b_detected or b_level == "HIGH") else "Medium"
+                anm_base = _make_deterministic_finding_id(
+                    analysis_id=analysis_id,
+                    rule_or_title="beaconing_detector",
+                    affected_parameter="Flow Timing / Beaconing",
+                    evidence=beaconing.get("verdict") or "",
+                )
+                anomalies.append({
+                    "anomaly_id": f"ANM-{anm_base[4:]}",
+                    "analysis_id": analysis_id,
+                    "filename": filename,
+                    "timestamp": created_at,
+                    "source": "beaconing_detector",
+                    "title": beaconing.get("verdict") or "Timing Regularity Anomaly",
+                    "severity": sev,
+                    "anomaly_level": b_level,
+                    "beacon_detected": b_detected,
+                    "observation_type": "Inferred",
+                    "anomaly_score": b_score,
+                    "confidence_level": beaconing.get("confidence_level"),
+                    "estimated_interval_sec": beaconing.get("estimated_interval_sec"),
+                    "description": beaconing.get("explanation") or "",
+                    "evidence": (beaconing.get("insights") or [""])[0] if beaconing.get("insights") else "",
+                })
+
+        # ── 3. Advisor Context (Risk, Skipped Rules, ML Explainability) ─────
+        rules_eval = sa.get("rules_evaluated") if isinstance(sa.get("rules_evaluated"), list) else []
+        rules_skip = sa.get("rules_skipped") if isinstance(sa.get("rules_skipped"), list) else []
+
+        risk_summaries.append({
+            "analysis_id": analysis_id,
+            "filename": filename,
+            "created_at": created_at,
+            "overall_risk_score": sa.get("overall_risk_score") if sa.get("overall_risk_score") is not None else rec.get("risk_score", 0),
+            "risk_level": sa.get("risk_level") or rec.get("risk_level") or "Unknown",
+            "score_explanation": sa.get("score_explanation") or "",
+            "rules_evaluated_count": len(rules_eval),
+            "rules_skipped_count": len(rules_skip),
+        })
+
+        for sk in rules_skip:
+            if isinstance(sk, dict):
+                skipped_rules.append({
+                    "analysis_id": analysis_id,
+                    "filename": filename,
+                    "created_at": created_at,
+                    "rule": sk.get("rule") or "Unknown Rule",
+                    "reason": sk.get("reason") or "Required packet parameters were not observable.",
+                })
+
+        expl = ml.get("explainability") if isinstance(ml.get("explainability"), dict) else None
+        ml_explanations.append({
+            "analysis_id": analysis_id,
+            "filename": filename,
+            "created_at": created_at,
+            "predicted_category": ml.get("predicted_category") or rec.get("predicted_category") or "Not Applicable",
+            "confidence_score": ml.get("confidence_score") if ml.get("confidence_score") is not None else rec.get("confidence_score"),
+            "model_status": ml.get("model_status") or "unavailable",
+            "model_note": ml.get("model_note") or "",
+            "summary": expl.get("summary") if expl else None,
+            "top_contributing_factors": expl.get("top_contributing_factors", []) if expl else [],
+            "features_required_missing": ml.get("features_required_missing") or [],
+        })
+
+    # Sort findings newest-first and anomalies chronologically (oldest -> newest)
+    findings.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    anomalies.sort(key=lambda x: x.get("timestamp") or "")
+
+    return {
+        "findings": findings,
+        "anomalies": anomalies,
+        "advisor_context": {
+            "analyses_count": len(records),
+            "risk_summaries": risk_summaries,
+            "skipped_rules": skipped_rules,
+            "ml_explanations": ml_explanations,
+            "beaconing_summaries": beaconing_summaries,
+        },
+    }
+
+
+def get_user_soc_feed(user_id: int | None) -> dict:
+    """
+    Return aggregated findings, anomaly timeline entries, and advisor context
+    strictly scoped to the authenticated user_id.
+    """
+    empty_feed = {
+        "findings": [],
+        "anomalies": [],
+        "advisor_context": {
+            "analyses_count": 0,
+            "risk_summaries": [],
+            "skipped_rules": [],
+            "ml_explanations": [],
+            "beaconing_summaries": [],
+        },
+    }
+
+    if user_id is None or not is_db_connected():
+        return empty_feed
+
+    if db_backend == "mongodb" and collection is not None:
+        try:
+            cursor = collection.find(
+                {"user_id": user_id},
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "filename": 1,
+                    "created_at": 1,
+                    "risk_score": 1,
+                    "risk_level": 1,
+                    "predicted_category": 1,
+                    "confidence_score": 1,
+                    "full_result": 1,
+                },
+            ).sort("created_at", pymongo.DESCENDING)
+            return _build_soc_feed_from_records(list(cursor))
+        except Exception as e:
+            logger.error("Error retrieving SOC feed from MongoDB: %s", e)
+            return empty_feed
+
+    if db_backend == "sqlite":
+        try:
+            with _get_sqlite_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, filename, created_at, risk_score, risk_level,
+                           predicted_category, confidence_score, full_result
+                    FROM analyses
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                """, (user_id,))
+                rows = [dict(row) for row in cursor.fetchall()]
+                return _build_soc_feed_from_records(rows)
+        except Exception as e:
+            logger.error("Error retrieving SOC feed from SQLite: %s", e)
+            return empty_feed
+
+    return empty_feed

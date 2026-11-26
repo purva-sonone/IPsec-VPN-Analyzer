@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import { useTheme } from '../context/ThemeContext';
-import { fmtDate } from '../lib/utils';
+import { fmtDate, sevColor } from '../lib/utils';
 import ThreatMatrix from '../components/ThreatMatrix';
 import TunnelTopologyCard from '../components/TunnelTopologyCard';
 
@@ -425,6 +425,7 @@ export default function Dashboard() {
 
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState(null);
+  const [socFeed, setSocFeed] = useState({ findings: [], anomalies: [], advisor_context: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sysDeps, setSysDeps] = useState(null);
@@ -446,12 +447,20 @@ export default function Dashboard() {
       .finally(() => setDepsLoading(false));
 
     try {
-      const [h, s] = await Promise.all([
+      const [h, s, f] = await Promise.all([
         api.history(),
         api.stats().catch(() => null),
+        api.findings().catch(() => null),
       ]);
       setHistory(Array.isArray(h) ? h : []);
       if (s) setStats(s);
+      if (f) {
+        setSocFeed({
+          findings: Array.isArray(f.findings) ? f.findings : [],
+          anomalies: Array.isArray(f.anomalies) ? f.anomalies : [],
+          advisor_context: f.advisor_context || null,
+        });
+      }
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
       setError(
@@ -917,6 +926,189 @@ export default function Dashboard() {
               accent="#8B5CF6"
               accentBg="rgba(139, 92, 246, 0.08)"
             />
+          </div>
+        )}
+
+        {/* Row 4: Anomaly Timeline + Recent Findings */}
+        {!error && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+            gap: '1.25rem',
+            alignItems: 'stretch',
+          }}>
+            {/* A. Anomaly Timeline (Behavioral Anomalies Only) */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Activity style={{ width: 15, height: 15, color: '#D97706' }} />
+                  <span className="card-header-title">Anomaly Timeline</span>
+                </div>
+                <span className="badge badge-neutral" style={{ fontSize: 10, padding: '1px 7px' }}>
+                  {socFeed.anomalies.length} {socFeed.anomalies.length === 1 ? 'Anomaly' : 'Anomalies'}
+                </span>
+              </div>
+
+              <div style={{ padding: '1rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                {loading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                    <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Loading anomaly telemetry…
+                  </div>
+                ) : socFeed.anomalies.length === 0 ? (
+                  <div style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    padding: '1.75rem 1rem', textAlign: 'center', gap: 6,
+                  }}>
+                    <Activity size={20} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      No behavioral anomalies detected
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 300 }}>
+                      Periodic timing / beaconing indicators (HIGH or ELEVATED) will appear chronologically here when observed.
+                    </p>
+                  </div>
+                ) : (
+                  socFeed.anomalies.slice(0, 6).map((anm) => {
+                    const isHigh = anm.anomaly_level === 'HIGH' || anm.severity === 'High';
+                    return (
+                      <div
+                        key={anm.anomaly_id}
+                        onClick={() => navigate(`/analysis/${anm.analysis_id}`)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analysis/${anm.analysis_id}`); }}
+                        style={{
+                          padding: '0.7rem 0.875rem',
+                          borderRadius: 8,
+                          border: `1px solid ${isHigh ? '#FECACA' : '#FDE68A'}`,
+                          backgroundColor: isHigh ? 'rgba(254, 242, 242, 0.55)' : 'rgba(255, 251, 235, 0.65)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                              backgroundColor: isHigh ? '#FEE2E2' : '#FEF3C7',
+                              color: isHigh ? '#B91C1C' : '#B45309',
+                              border: `1px solid ${isHigh ? '#FCA5A5' : '#FCD34D'}`,
+                            }}>
+                              {anm.anomaly_level || (isHigh ? 'HIGH' : 'ELEVATED')}
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: '#92400E', backgroundColor: '#FFFBEB', padding: '1px 6px', borderRadius: 9999, border: '1px solid #FDE68A' }}>
+                              {anm.observation_type || 'Inferred'}
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {anm.title}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                            {fmtDate(anm.timestamp)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-secondary)' }}>
+                          <span style={{ fontFamily: 'monospace' }}>{anm.filename}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {anm.anomaly_score != null && (
+                              <span>Score: <strong>{anm.anomaly_score}/100</strong></span>
+                            )}
+                            {anm.confidence_level && (
+                              <span>Confidence: <strong>{anm.confidence_level}</strong></span>
+                            )}
+                            <span style={{ color: 'var(--blue)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              Inspect <ArrowRight size={11} />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* B. Recent Findings (Security Rule Findings Only) */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <AlertTriangle style={{ width: 15, height: 15, color: 'var(--blue)' }} />
+                  <span className="card-header-title">Recent Findings</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/findings')}
+                  style={{
+                    fontSize: 11, fontWeight: 600, color: 'var(--blue)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0,
+                  }}
+                >
+                  View All ({socFeed.findings.length}) <ArrowRight size={11} />
+                </button>
+              </div>
+
+              <div style={{ padding: '1rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                {loading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                    <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Loading security findings…
+                  </div>
+                ) : socFeed.findings.length === 0 ? (
+                  <div style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    padding: '1.75rem 1rem', textAlign: 'center', gap: 6,
+                  }}>
+                    <Shield size={20} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      No security findings yet
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 300 }}>
+                      Upload a PCAP file to evaluate cryptographic rules and generate findings.
+                    </p>
+                  </div>
+                ) : (
+                  socFeed.findings.slice(0, 5).map((f) => (
+                    <div
+                      key={f.finding_id}
+                      onClick={() => navigate(`/analysis/${f.analysis_id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analysis/${f.analysis_id}`); }}
+                      style={{
+                        padding: '0.65rem 0.875rem',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--bg-surface)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>
+                            {f.finding_id}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {f.title}
+                          </span>
+                        </div>
+                        <span className={`badge ${sevColor(f.severity)}`} style={{ fontSize: 10, flexShrink: 0 }}>
+                          {f.severity}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)' }}>
+                        <span>Parameter: <strong style={{ color: 'var(--text-secondary)' }}>{f.affected_parameter}</strong></span>
+                        <span>{fmtDate(f.created_at)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

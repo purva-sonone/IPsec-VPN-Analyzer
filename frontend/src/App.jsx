@@ -2,22 +2,27 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Shield, LayoutDashboard, UploadCloud, History,
-  Activity, XCircle, LogOut, User, ListChecks
+  Activity, XCircle, LogOut, User, ListChecks,
+  AlertOctagon, Sparkles,
 } from 'lucide-react';
 import { api, getToken, getUser, clearSession } from './lib/api';
 import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
 import HistoryPage from './pages/HistoryPage';
 import AnalysisDetail from './pages/AnalysisDetail';
+import FindingsPage from './pages/FindingsPage';
+import AdvisorPage from './pages/AdvisorPage';
 import LoginSignup from './pages/LoginSignup';
 import { ThemeProvider } from './context/ThemeContext';
 import ThemeToggle from './components/ThemeToggle';
 import SecurityRulesModal from './components/SecurityRulesModal';
 
 const NAV = [
-  { to: '/',        label: 'Overview',         icon: LayoutDashboard },
-  { to: '/upload',  label: 'Analyze PCAP',     icon: UploadCloud },
-  { to: '/history', label: 'Analysis History', icon: History },
+  { to: '/',        label: 'Overview',           icon: LayoutDashboard },
+  { to: '/upload',  label: 'Analyze PCAP',       icon: UploadCloud },
+  { to: '/history', label: 'Analysis History',   icon: History },
+  { to: '/findings', label: 'Findings',          icon: AlertOctagon },
+  { to: '/advisor',  label: 'AI Security Advisor', icon: Sparkles },
 ];
 
 function Sidebar({ username, onLogout, onOpenRules }) {
@@ -184,6 +189,8 @@ function PageHeaderTitle() {
   if (path === '/history') return 'Analysis History';
   if (path.startsWith('/analysis/')) return 'Analysis Details';
   if (path === '/results') return 'Analysis Report';
+  if (path === '/findings') return 'Security Findings';
+  if (path === '/advisor') return 'AI Security Advisor';
   return 'Dashboard';
 }
 
@@ -280,6 +287,8 @@ function AppShell({ username, onLogout }) {
             <Route path="/history"      element={<HistoryPage />} />
             <Route path="/analysis/:id" element={<AnalysisDetail />} />
             <Route path="/results"      element={<AnalysisDetail />} />
+            <Route path="/findings"     element={<FindingsPage />} />
+            <Route path="/advisor"      element={<AdvisorPage />} />
           </Routes>
         </main>
 

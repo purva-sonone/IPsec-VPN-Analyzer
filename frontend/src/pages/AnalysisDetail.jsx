@@ -966,6 +966,115 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
   );
 }
 
+// ── Observation Badge with Tooltip ─────────────────────────────────────────
+const OBSERVATION_TOOLTIPS = {
+  Observed: 'Directly identified from the captured packet data.',
+  Inferred: 'Derived from available packet information; not directly confirmed.',
+};
+
+function ObservationBadge({ observationType }) {
+  const isInferred = observationType === 'Inferred';
+  const label = observationType || 'Observed';
+  const tooltipText = isInferred
+    ? OBSERVATION_TOOLTIPS.Inferred
+    : OBSERVATION_TOOLTIPS.Observed;
+
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [tapOpen, setTapOpen] = useState(false);
+  const isVisible = hoverOpen || focusOpen || tapOpen;
+
+  useEffect(() => {
+    if (!tapOpen) return;
+    const handleOutside = () => setTapOpen(false);
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setTapOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [tapOpen]);
+
+  return (
+    <span
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+      onMouseEnter={() => setHoverOpen(true)}
+      onMouseLeave={() => setHoverOpen(false)}
+    >
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: 10,
+        fontWeight: 600,
+        padding: '1px 6px',
+        borderRadius: 9999,
+        backgroundColor: isInferred ? '#FFFBEB' : '#F0FDF4',
+        color: isInferred ? '#B45309' : '#15803D',
+        border: `1px solid ${isInferred ? '#FDE68A' : '#BBF7D0'}`,
+      }}>
+        {label}
+        <button
+          type="button"
+          aria-label={`${label} info: ${tooltipText}`}
+          aria-expanded={isVisible}
+          onFocus={() => setFocusOpen(true)}
+          onBlur={() => setFocusOpen(false)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setTapOpen((prev) => !prev);
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            margin: 0,
+            border: 'none',
+            background: 'transparent',
+            color: 'inherit',
+            cursor: 'pointer',
+            lineHeight: 1,
+            opacity: 0.85,
+          }}
+        >
+          <Info style={{ width: 11, height: 11 }} />
+        </button>
+      </span>
+
+      {isVisible && (
+        <span
+          role="tooltip"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 6px)',
+            left: 0,
+            zIndex: 30,
+            width: 'max-content',
+            maxWidth: 230,
+            padding: '6px 9px',
+            borderRadius: 6,
+            backgroundColor: '#0F172A',
+            color: '#F8FAFC',
+            fontSize: 11,
+            fontWeight: 500,
+            lineHeight: 1.4,
+            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.18)',
+            pointerEvents: 'none',
+          }}
+        >
+          {tooltipText}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ── Network Forensics Timeline ─────────────────────────────────────────────
 function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket }) {
   const [filterProto, setFilterProto] = useState('ALL');
@@ -1141,7 +1250,6 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
               const ProtoIcon = st.Icon;
               const isExpanded = expandedId === evt.event_id;
               const det = evt.details || {};
-              const isInferred = evt.observation_type === 'Inferred';
 
               return (
                 <div key={evt.event_id} style={{ position: 'relative' }}>
@@ -1186,14 +1294,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                         <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
                           {evt.event_type}
                         </span>
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 9999,
-                          backgroundColor: isInferred ? '#FFFBEB' : '#F0FDF4',
-                          color: isInferred ? '#B45309' : '#15803D',
-                          border: `1px solid ${isInferred ? '#FDE68A' : '#BBF7D0'}`,
-                        }}>
-                          {evt.observation_type || 'Observed'}
-                        </span>
+                        <ObservationBadge observationType={evt.observation_type} />
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
@@ -1631,44 +1732,9 @@ export default function AnalysisDetail() {
         </a>
       </div>
 
-      {/* ── UPPER SECTION: Data Visualizations & Traffic Graphs ────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <BarChart3 style={{ width: 16, height: 16, color: 'var(--blue)' }} />
-            <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Traffic Visualizations & Behavioral Analytics
-            </h2>
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Flow Timing & Cadence Telemetry</span>
-        </div>
-
-        {/* Row 1: 2-Column Desktop Grid (Main Bar Graph + Packet-Size Distribution) */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-          gap: '1rem',
-          alignItems: 'stretch',
-        }}>
-          <ClassProbabilityCard ml={ml} />
-          <PacketDistributionCard distribution={m?.packet_size_distribution} stats={m?.packet_size_stats} />
-        </div>
-
-        {/* Row 2: 2-Column Desktop Grid (XAI Decision Factors + C2 Beaconing Cadence) */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-          gap: '1rem',
-          alignItems: 'stretch',
-        }}>
-          <XaiCard ml={ml} />
-          <BeaconingAnalysisCard beaconing={m?.beaconing_analysis} packets={m?.packets} />
-        </div>
-      </div>
-
-      {/* ── LOWER SECTION: Written Analysis, Risk Assessment, Findings & Evidence ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+      {/* ── UPPER SECTION: Written Analysis, Risk Assessment, Findings & Evidence ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingBottom: '0.25rem' }}>
           <FileText style={{ width: 16, height: 16, color: 'var(--blue)' }} />
           <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Written Analysis, Risk Assessment & Security Findings
@@ -1791,7 +1857,45 @@ export default function AnalysisDetail() {
           <AnalysisCoverageSummary evaluated={sa?.rules_evaluated ?? []} skipped={sa?.rules_skipped ?? []} />
           <RuleAudit evaluated={sa?.rules_evaluated} skipped={sa?.rules_skipped} />
         </div>
+      </div>
 
+      {/* ── LOWER SECTION: Data Visualizations & Traffic Graphs ────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <BarChart3 style={{ width: 16, height: 16, color: 'var(--blue)' }} />
+            <h2 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Traffic Visualizations & Behavioral Analytics
+            </h2>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Flow Timing & Cadence Telemetry</span>
+        </div>
+
+        {/* Row 1: 2-Column Desktop Grid (Main Bar Graph + Packet-Size Distribution) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1rem',
+          alignItems: 'stretch',
+        }}>
+          <ClassProbabilityCard ml={ml} />
+          <PacketDistributionCard distribution={m?.packet_size_distribution} stats={m?.packet_size_stats} />
+        </div>
+
+        {/* Row 2: 2-Column Desktop Grid (XAI Decision Factors + C2 Beaconing Cadence) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1rem',
+          alignItems: 'stretch',
+        }}>
+          <XaiCard ml={ml} />
+          <BeaconingAnalysisCard beaconing={m?.beaconing_analysis} packets={m?.packets} />
+        </div>
+      </div>
+
+      {/* ── FORENSICS TIMELINE & PACKET EVIDENCE ───────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {/* Network Forensics Timeline */}
         <div className="card" style={{ padding: '1.25rem' }}>
           <SectionHead
@@ -1819,7 +1923,6 @@ export default function AnalysisDetail() {
             selectedPacketNumber={selectedPacketNumber}
           />
         </div>
-
       </div>
 
     </div>

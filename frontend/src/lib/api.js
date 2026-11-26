@@ -57,6 +57,7 @@ export const api = {
   upload:     (form) => request(`${BASE}/upload`, { method: 'POST', body: form }),
   history:    ()     => request(`${BASE}/history`),
   stats:      ()     => request(`${BASE}/history/stats`),
+  findings:   ()     => request(`${BASE}/findings`),
   getById:    (id)   => request(`${BASE}/history/${id}`),
   deleteById: (id)   => request(`${BASE}/history/${id}`, { method: 'DELETE' }),
   demoAnalyze: ()    => request(`${BASE}/sample/demo-analyze`, { method: 'POST' }),

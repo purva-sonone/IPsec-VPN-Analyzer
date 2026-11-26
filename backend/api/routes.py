@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 from core.analyzer import analyze_pcap, get_tshark_info
 from core.security_rules import evaluate_security
 from core.ml_model import predict_traffic_category
-from core.database import save_analysis, get_all_analyses, get_analysis_by_id, delete_analysis, get_history_stats, collection as db_collection
+from core.database import save_analysis, get_all_analyses, get_analysis_by_id, delete_analysis, get_history_stats, get_user_soc_feed, collection as db_collection
 from core.timeline import build_forensics_timeline
 from core.report_generator import generate_pdf
 from models.schemas import AnalysisReport
@@ -207,6 +207,13 @@ def history_stats(user: dict = Depends(require_auth)):
             "informational": 0,
             "ml_classifications": 0,
         }
+
+
+@router.get("/findings")
+def list_user_findings(user: dict = Depends(require_auth)):
+    """Return user-scoped findings, anomaly timeline, and advisor context."""
+    user_id = user.get("user_id")
+    return get_user_soc_feed(user_id=user_id)
 
 
 @router.get("/history/{analysis_id}")
