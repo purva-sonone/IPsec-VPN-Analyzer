@@ -1,1072 +1,774 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Sparkles, Shield, AlertTriangle, Activity,
-  Cpu, Info, ArrowRight, Loader2,
-  XCircle, HelpCircle, Zap, ChevronDown, Layers, CheckCircle2,
+  Sparkles, Send, Trash2, RefreshCw, Loader2,
+  AlertTriangle, CheckCircle2, XCircle, FileText,
+  ArrowRight, Shield, MessageSquare, RotateCcw,
+  Paperclip, X as XIcon, Image as ImageIcon,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { fmtDate, sevColor } from '../lib/utils';
+import { fmtDate } from '../lib/utils';
 
-// ─────────────────────────────────────────────────────────────
-// Constants & Helpers
-// ─────────────────────────────────────────────────────────────
-const SEV_WEIGHT = {
-  Critical: 4,
-  High: 3,
-  Medium: 2,
-  Low: 1,
-  Informational: 0,
-};
+const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const ALLOWED_PDF_EXTS = new Set(['.pdf']);
 
-function sevRank(sev) {
-  return SEV_WEIGHT[sev] ?? 0;
-}
+const SUGGESTED_QUESTIONS = ['Explain my complete security report.',
+  'Why is my encryption marked weak?',
+  'Why is my Diffie-Hellman group considered weak?',
+  'Explain my risk score.',
+  'Why were some security rules skipped?',
+  'What does this packet show?',
+  'Explain my beaconing analysis.',
+  'What should I fix first?',
+];
 
-function SectionHeader({ icon: Icon, label, subtitle, color = 'var(--blue)', bg = 'var(--blue-light)', border = 'var(--blue-border)', right }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-      <div style={{
-        width: 30, height: 30, borderRadius: 8,
-        backgroundColor: bg, border: `1px solid ${border}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <Icon size={15} style={{ color }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</h2>
-        {subtitle && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{subtitle}</div>
-        )}
-      </div>
-      {right}
-    </div>
-  );
-}
-
-function Card({ children, style = {} }) {
-  return (
-    <div style={{
-      backgroundColor: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 10, padding: '1rem 1.25rem',
-      ...style,
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function ObsBadge({ type }) {
-  const isObs = type === 'Observed';
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 9999,
-      backgroundColor: isObs ? 'var(--blue-light)' : 'var(--yellow-light)',
-      color: isObs ? 'var(--blue)' : 'var(--yellow-text)',
-      border: `1px solid ${isObs ? 'var(--blue-border)' : 'var(--yellow-border)'}`,
-    }}>
-      {type ?? 'Unknown'}
-    </span>
-  );
-}
-
-function InfoNote({ children }) {
-  return (
-    <div style={{
-      backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 7, padding: '0.5rem 0.75rem',
-      fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
-      display: 'flex', gap: 6,
-    }}>
-      <Info size={12} style={{ flexShrink: 0, marginTop: 1 }} />
-      <div>{children}</div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Main component
-// ─────────────────────────────────────────────────────────────
-export default function AdvisorPage() {
-  const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Collapsible / view-more toggles
-  const [showAllPriority, setShowAllPriority] = useState(false);
-  const [showAllML, setShowAllML] = useState(false);
-  const [showRiskDetails, setShowRiskDetails] = useState(false);
-  const [showNormalBeaconing, setShowNormalBeaconing] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    api.findings()
-      .then((d) => setData(d))
-      .catch((e) => setError(e?.message ?? 'Failed to load advisor context.'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const ctx = data?.advisor_context ?? {};
-  const findings = data?.findings ?? [];
-  const anomalies = data?.anomalies ?? [];
-  const count = ctx.analyses_count ?? 0;
-  const riskSummaries = ctx.risk_summaries ?? [];
-  const skipped = ctx.skipped_rules ?? [];
-  const mlExplanations = ctx.ml_explanations ?? [];
-  const beaconingSummaries = ctx.beaconing_summaries ?? [];
-
-  // 1. Priority Actions: actionable findings sorted by severity + risk contribution
-  const priorityActions = useMemo(() => {
-    return findings
-      .filter((f) => f.status === 'Action Required' || (f.risk_contribution ?? 0) > 0 || sevRank(f.severity) >= 1)
-      .slice()
-      .sort((a, b) => {
-        const sDiff = sevRank(b.severity) - sevRank(a.severity);
-        if (sDiff !== 0) return sDiff;
-        const rDiff = (b.risk_contribution ?? 0) - (a.risk_contribution ?? 0);
-        if (rDiff !== 0) return rDiff;
-        return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
-      });
-  }, [findings]);
-
-  // 2. Consolidated Security Insights: group identical rule findings across sessions
-  const consolidatedInsights = useMemo(() => {
-    const map = new Map();
-    for (const f of findings) {
-      const key = `${f.title ?? ''}||${f.severity ?? ''}||${f.affected_parameter ?? ''}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          title: f.title,
-          severity: f.severity,
-          status: f.status,
-          observation_type: f.observation_type,
-          affected_parameter: f.affected_parameter,
-          description: f.description,
-          recommendation: f.recommendation,
-          maxRisk: f.risk_contribution ?? 0,
-          occurrences: 0,
-          analyses: new Map(),
-        });
-      }
-      const entry = map.get(key);
-      entry.occurrences += 1;
-      if ((f.risk_contribution ?? 0) > entry.maxRisk) {
-        entry.maxRisk = f.risk_contribution ?? 0;
-      }
-      if (f.analysis_id && !entry.analyses.has(f.analysis_id)) {
-        entry.analyses.set(f.analysis_id, {
-          analysis_id: f.analysis_id,
-          filename: f.filename || f.analysis_id,
-          finding_id: f.finding_id,
-          created_at: f.created_at,
-        });
-      }
+// Lightweight, safe markdown renderer (headings, bold, inline code, lists)
+function renderInline(text) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={idx}>{part.slice(2, -2)}</strong>;
     }
-    return Array.from(map.values())
-      .map((item) => ({ ...item, analyses: Array.from(item.analyses.values()) }))
-      .sort((a, b) => {
-        const sDiff = sevRank(b.severity) - sevRank(a.severity);
-        if (sDiff !== 0) return sDiff;
-        return b.occurrences - a.occurrences;
-      });
-  }, [findings]);
-
-  // 5. Recommended Remediation: deduplicate by (recommendation + affected_parameter)
-  const remediations = useMemo(() => {
-    const map = new Map();
-    for (const f of findings) {
-      if (!f.recommendation) continue;
-      if (f.status !== 'Action Required' && (f.risk_contribution ?? 0) <= 0 && sevRank(f.severity) < 1) {
-        continue;
-      }
-      const key = `${f.recommendation.trim()}||${f.affected_parameter ?? ''}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          recommendation: f.recommendation,
-          affected_parameter: f.affected_parameter || 'General',
-          severity: f.severity,
-          evidence: f.evidence,
-          analyses: new Map(),
-        });
-      }
-      const entry = map.get(key);
-      if (sevRank(f.severity) > sevRank(entry.severity)) {
-        entry.severity = f.severity;
-      }
-      if (f.analysis_id && !entry.analyses.has(f.analysis_id)) {
-        entry.analyses.set(f.analysis_id, {
-          analysis_id: f.analysis_id,
-          filename: f.filename || f.analysis_id,
-          finding_id: f.finding_id,
-        });
-      }
-    }
-    return Array.from(map.values())
-      .map((item) => ({ ...item, analyses: Array.from(item.analyses.values()) }))
-      .sort((a, b) => sevRank(b.severity) - sevRank(a.severity));
-  }, [findings]);
-
-  // Consolidated skipped rules
-  const consolidatedSkipped = useMemo(() => {
-    const map = new Map();
-    for (const s of skipped) {
-      const ruleName = s.rule_id ?? s.rule ?? 'Unknown rule';
-      const reason = s.reason ?? '';
-      const key = `${ruleName}||${reason}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          rule: ruleName,
-          parameter: s.parameter,
-          reason,
-          count: 0,
-          analyses: new Map(),
-        });
-      }
-      const entry = map.get(key);
-      entry.count += 1;
-      if (s.analysis_id && !entry.analyses.has(s.analysis_id)) {
-        entry.analyses.set(s.analysis_id, {
-          analysis_id: s.analysis_id,
-          filename: s.filename || s.analysis_id,
-        });
-      }
-    }
-    return Array.from(map.values()).map((item) => ({
-      ...item,
-      analyses: Array.from(item.analyses.values()),
-    }));
-  }, [skipped]);
-
-  // Risk summary quick counts
-  const riskCounts = useMemo(() => {
-    let highCrit = 0;
-    let medium = 0;
-    let lowInfo = 0;
-    for (const r of riskSummaries) {
-      const lvl = r.risk_level ?? r.level ?? '';
-      if (lvl === 'Critical' || lvl === 'High') highCrit += 1;
-      else if (lvl === 'Medium') medium += 1;
-      else lowInfo += 1;
-    }
-    return { highCrit, medium, lowInfo };
-  }, [riskSummaries]);
-
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', gap: 10, color: 'var(--text-muted)', fontSize: 13 }}>
-      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Loading advisor context…
-    </div>
-  );
-
-  if (error) return (
-    <div style={{
-      padding: '1rem', borderRadius: 10,
-      backgroundColor: 'var(--red-light)', border: '1px solid var(--red-border)',
-      color: 'var(--red-text)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
-    }}>
-      <AlertTriangle size={16} /> {error}
-    </div>
-  );
-
-  if (count === 0) return (
-    <EmptyAdvisor onAnalyze={() => navigate('/upload')} />
-  );
-
-  const visiblePriority = showAllPriority ? priorityActions : priorityActions.slice(0, 5);
-  const visibleML = showAllML ? mlExplanations : mlExplanations.slice(0, 4);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 960, margin: '0 auto' }}>
-
-      {/* ── Page Header ───────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 9,
-          backgroundColor: 'var(--blue-light)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '1px solid var(--blue-border)', flexShrink: 0,
-        }}>
-          <Sparkles size={18} style={{ color: 'var(--blue)' }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-            AI Security Advisor
-          </h1>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-            Deterministic rule-based findings, behavioral timing telemetry, and ML traffic insights synthesized across {count} analysis session{count !== 1 ? 's' : ''}.
-          </p>
-        </div>
-      </div>
-
-      {/* ── 1. Priority Actions ───────────────────────────── */}
-      <Card>
-        <SectionHeader
-          icon={Zap}
-          label="Priority Actions"
-          subtitle="Highest-severity actionable findings ranked by severity and risk contribution"
-          color="var(--red)"
-          bg="var(--red-light)"
-          border="var(--red-border)"
-          right={priorityActions.length > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
-              {priorityActions.length} actionable
-            </span>
-          )}
-        />
-        {priorityActions.length === 0 ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '0.75rem', borderRadius: 8,
-            backgroundColor: 'var(--green-light)', border: '1px solid var(--green-border)',
-            color: 'var(--green-text)', fontSize: 12,
-          }}>
-            <CheckCircle2 size={15} />
-            <span>No action-required findings detected in the evaluated captures.</span>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {visiblePriority.map((f) => (
-              <PriorityActionRow
-                key={f.finding_id}
-                finding={f}
-                onNavigate={() => navigate(`/analysis/${f.analysis_id}`)}
-              />
-            ))}
-            {priorityActions.length > 5 && (
-              <button
-                type="button"
-                onClick={() => setShowAllPriority((v) => !v)}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'transparent', border: '1px solid var(--border)',
-                  borderRadius: 6, padding: '0.35rem 0.75rem',
-                  fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
-                }}
-              >
-                {showAllPriority ? 'Show top 5' : `Show all ${priorityActions.length} priority actions`}
-              </button>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* ── 2. Consolidated Security Insights ─────────────── */}
-      {consolidatedInsights.length > 0 && (
-        <Card>
-          <SectionHeader
-            icon={Layers}
-            label="Consolidated Security Insights"
-            subtitle="Repeated findings grouped by rule, severity, and affected parameter across sessions"
-            color="var(--yellow-text)"
-            bg="var(--yellow-light)"
-            border="var(--yellow-border)"
-            right={
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                {consolidatedInsights.length} unique pattern{consolidatedInsights.length !== 1 ? 's' : ''} ({findings.length} total)
-              </span>
-            }
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {consolidatedInsights.map((group) => (
-              <ConsolidatedInsightRow
-                key={group.key}
-                group={group}
-                onNavigateAnalysis={(aid) => navigate(`/analysis/${aid}`)}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ── 3. Behavioral Security Insights ───────────────── */}
-      {(anomalies.length > 0 || beaconingSummaries.length > 0) && (
-        <Card>
-          <SectionHeader
-            icon={Activity}
-            label="Behavioral Security Insights"
-            subtitle="Inter-arrival timing regularity and beaconing telemetry"
-            color="var(--red)"
-            bg="var(--red-light)"
-            border="var(--red-border)"
-            right={
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                {anomalies.length} anomal{anomalies.length === 1 ? 'y' : 'ies'}
-              </span>
-            }
-          />
-          <InfoNote>
-            <strong>Observed vs. Inferred:</strong> Packet timestamps and inter-arrival intervals are{' '}
-            <strong>Observed</strong> directly from the capture, while periodicity/beaconing classifications are{' '}
-            <strong>Inferred</strong> behavioral indicators. <strong>HIGH</strong> indicates persistent low-jitter
-            periodic cadence; <strong>ELEVATED</strong> indicates above-baseline timing regularity without a confirmed
-            beacon signature. Legitimate VPN keep-alives can also exhibit regular cadence.
-          </InfoNote>
-
-          {anomalies.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-              {anomalies.map((a, i) => (
-                <BeaconingRow key={a.anomaly_id ?? i} anomaly={a} onNavigate={() => navigate(`/analysis/${a.analysis_id}`)} />
-              ))}
-            </div>
-          ) : (
-            <p style={{ margin: '0.75rem 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-              No HIGH or ELEVATED behavioral timing anomalies detected across your captures.
-            </p>
-          )}
-
-          {beaconingSummaries.length > 0 && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <button
-                type="button"
-                onClick={() => setShowNormalBeaconing((v) => !v)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  background: 'transparent', border: '1px solid var(--border)',
-                  borderRadius: 6, padding: '0.35rem 0.75rem',
-                  fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
-                }}
-              >
-                <ChevronDown size={12} style={{
-                  transform: showNormalBeaconing ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.15s',
-                }} />
-                {showNormalBeaconing ? 'Hide' : 'Show'} all {beaconingSummaries.length} session timing summaries
-              </button>
-              {showNormalBeaconing && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.625rem' }}>
-                  {beaconingSummaries.map((b, i) => (
-                    <BeaconingContextRow
-                      key={b.analysis_id ?? i}
-                      summary={b}
-                      onNavigate={b.analysis_id ? () => navigate(`/analysis/${b.analysis_id}`) : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ── 4. ML Explainability ──────────────────────────── */}
-      {mlExplanations.length > 0 && (
-        <Card>
-          <SectionHeader
-            icon={Cpu}
-            label="ML Explainability"
-            subtitle="Random Forest traffic categorization and feature attribution"
-            color="var(--blue)"
-            bg="var(--blue-light)"
-            border="var(--blue-border)"
-            right={
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                {mlExplanations.length} session{mlExplanations.length !== 1 ? 's' : ''}
-              </span>
-            }
-          />
-          <InfoNote>
-            Classifications are produced by a scikit-learn model trained on the VNAT dataset. A predicted application
-            category (e.g., CHAT, STREAMING, or C2) reflects statistical similarity to training flows — it is{' '}
-            <strong>never proof of malicious activity</strong>. Short captures (&lt;30 packets), missing flow features,
-            or low confidence scores reduce reliability and should be treated as indicative only.
-          </InfoNote>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-            {visibleML.map((ml, i) => (
-              <MLExplainRow
-                key={ml.analysis_id ?? i}
-                ml={ml}
-                onNavigate={ml.analysis_id ? () => navigate(`/analysis/${ml.analysis_id}`) : undefined}
-              />
-            ))}
-            {mlExplanations.length > 4 && (
-              <button
-                type="button"
-                onClick={() => setShowAllML((v) => !v)}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'transparent', border: '1px solid var(--border)',
-                  borderRadius: 6, padding: '0.35rem 0.75rem',
-                  fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
-                }}
-              >
-                {showAllML ? 'Show fewer' : `Show all ${mlExplanations.length} ML explanations`}
-              </button>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* ── 5. Recommended Remediation ────────────────────── */}
-      {remediations.length > 0 && (
-        <Card>
-          <SectionHeader
-            icon={Shield}
-            label="Recommended Remediation"
-            subtitle="Deduplicated evidence-based remediation steps mapped to affected parameters"
-            color="var(--green-text)"
-            bg="var(--green-light)"
-            border="var(--green-border)"
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {remediations.map((rem) => (
-              <RemediationRow
-                key={rem.key}
-                item={rem}
-                onNavigateAnalysis={(aid) => navigate(`/analysis/${aid}`)}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ── 6. Overall Risk Summary (Compact & Collapsible) ─ */}
-      <Card>
-        <SectionHeader
-          icon={Shield}
-          label="Overall Risk Summary"
-          subtitle={`${riskSummaries.length} analyses · ${riskCounts.highCrit} High/Critical · ${riskCounts.medium} Medium · ${riskCounts.lowInfo} Low/Informational`}
-          right={
-            riskSummaries.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowRiskDetails((v) => !v)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '0.3rem 0.65rem', borderRadius: 6,
-                  border: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)',
-                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                <ChevronDown size={12} style={{
-                  transform: showRiskDetails ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.15s',
-                }} />
-                {showRiskDetails ? 'Collapse' : `Expand (${riskSummaries.length})`}
-              </button>
-            )
-          }
-        />
-        <InfoNote>
-          A risk score of 0 does <strong>not</strong> mean the VPN is fully secure — it means no high-risk values were
-          found among the parameters visible in this capture. Rules that require parameters not present in the PCAP are
-          skipped and do not contribute to the score.
-        </InfoNote>
-
-        {riskSummaries.length === 0 ? (
-          <p style={{ margin: '0.75rem 0 0', fontSize: 13, color: 'var(--text-muted)' }}>No risk summaries available yet.</p>
-        ) : showRiskDetails && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
-            {riskSummaries.map((r, i) => (
-              <RiskSummaryRow key={r.analysis_id ?? i} summary={r} onNavigate={() => navigate(`/analysis/${r.analysis_id}`)} />
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* ── 7. Skipped Security Rules / Unavailable Info ──── */}
-      {consolidatedSkipped.length > 0 && (
-        <Card>
-          <SectionHeader
-            icon={HelpCircle}
-            label="Skipped Rules & Unavailable Parameters"
-            subtitle="Parameters not observable in captured packets (neither passed nor failed)"
-            color="var(--text-muted)"
-            bg="var(--bg-surface)"
-            border="var(--border)"
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {consolidatedSkipped.map((s) => (
-              <SkippedRuleRow key={s.key} rule={s} />
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sub-row components
-// ─────────────────────────────────────────────────────────────
-function PriorityActionRow({ finding: f, onNavigate }) {
-  return (
-    <div style={{
-      padding: '0.75rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 8,
-      display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{f.finding_id}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1, minWidth: 180 }}>
-          {f.title}
-        </span>
-        <span className={`badge ${sevColor(f.severity)}`} style={{ fontSize: 10 }}>{f.severity}</span>
-        {(f.risk_contribution ?? 0) > 0 && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
-            backgroundColor: 'var(--red-light)', color: 'var(--red-text)',
-            border: '1px solid var(--red-border)',
-          }}>
-            +{f.risk_contribution} risk
-          </span>
-        )}
-        <ObsBadge type={f.observation_type} />
-      </div>
-      {f.recommendation && (
-        <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-          <strong>Action:</strong> {f.recommendation}
-        </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)' }}>
-        <span>Parameter: <strong style={{ color: 'var(--text-secondary)' }}>{f.affected_parameter || '—'}</strong></span>
-        {f.filename && <span style={{ fontFamily: 'monospace', fontSize: 10 }}>📁 {f.filename}</span>}
-        <button
-          type="button"
-          onClick={onNavigate}
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code
+          key={idx}
           style={{
-            marginLeft: 'auto',
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '0.25rem 0.6rem', borderRadius: 6,
-            border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-            color: 'var(--blue)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'monospace',
+            fontSize: '0.9em',
+            padding: '1px 5px',
+            borderRadius: 4,
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border)',
           }}
         >
-          View Analysis <ArrowRight size={10} />
-        </button>
-      </div>
-    </div>
-  );
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <span key={idx}>{part}</span>;
+  });
 }
 
-function ConsolidatedInsightRow({ group, onNavigateAnalysis }) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleAnalyses = expanded ? group.analyses : group.analyses.slice(0, 3);
+function MarkdownBlock({ content }) {
+  const lines = String(content || '').split('\n');
+  const elements = [];
+  let listItems = [];
 
-  return (
-    <div style={{
-      padding: '0.75rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border)', borderRadius: 8,
-      display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1, minWidth: 180 }}>
-          {group.title}
-        </span>
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
-          backgroundColor: 'var(--bg-card)', color: 'var(--text-secondary)',
-          border: '1px solid var(--border)',
-        }}>
-          {group.occurrences} occurrence{group.occurrences !== 1 ? 's' : ''} · {group.analyses.length} capture{group.analyses.length !== 1 ? 's' : ''}
-        </span>
-        <span className={`badge ${sevColor(group.severity)}`} style={{ fontSize: 10 }}>{group.severity}</span>
-        <ObsBadge type={group.observation_type} />
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        Affected parameter: <strong style={{ color: 'var(--text-secondary)' }}>{group.affected_parameter || '—'}</strong>
-      </div>
-      {group.description && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{group.description}</p>
-      )}
-      {group.analyses.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Affected analyses:</span>
-          {visibleAnalyses.map((a) => (
-            <button
-              key={a.analysis_id}
-              type="button"
-              onClick={() => onNavigateAnalysis(a.analysis_id)}
-              title={`Open analysis (${a.finding_id})`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '0.2rem 0.5rem', borderRadius: 5,
-                border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-                color: 'var(--blue)', fontSize: 10, fontFamily: 'monospace', cursor: 'pointer',
-              }}
-            >
-              {a.filename} <ArrowRight size={9} />
-            </button>
+  const flushList = (keyPrefix) => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`${keyPrefix}-ul`} style={{ margin: '0.35rem 0', paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {listItems.map((item, idx) => (
+            <li key={idx} style={{ fontSize: 13, lineHeight: 1.55 }}>{renderInline(item)}</li>
           ))}
-          {group.analyses.length > 3 && (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              style={{
-                background: 'transparent', border: 'none', padding: '0.2rem 0.4rem',
-                fontSize: 10, fontWeight: 600, color: 'var(--blue)', cursor: 'pointer',
-              }}
-            >
-              {expanded ? 'Show less' : `+${group.analyses.length - 3} more`}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+        </ul>
+      );
+      listItems = [];
+    }
+  };
 
-function RemediationRow({ item, onNavigateAnalysis }) {
-  return (
-    <div style={{
-      padding: '0.75rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border)', borderRadius: 8,
-      display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span className={`badge ${sevColor(item.severity)}`} style={{ fontSize: 10 }}>{item.severity}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {item.affected_parameter}
-        </span>
-      </div>
-      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55 }}>
-        {item.recommendation}
-      </p>
-      {item.evidence && (
-        <div style={{
-          fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)',
-          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '0.35rem 0.6rem',
-        }}>
-          🔗 {item.evidence}
-        </div>
-      )}
-      {item.analyses.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Applies to:</span>
-          {item.analyses.slice(0, 4).map((a) => (
-            <button
-              key={a.analysis_id}
-              type="button"
-              onClick={() => onNavigateAnalysis(a.analysis_id)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '0.2rem 0.5rem', borderRadius: 5,
-                border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-                color: 'var(--blue)', fontSize: 10, fontFamily: 'monospace', cursor: 'pointer',
-              }}
-            >
-              {a.filename} <ArrowRight size={9} />
-            </button>
-          ))}
-          {item.analyses.length > 4 && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>+{item.analyses.length - 4} more</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RiskSummaryRow({ summary: r, onNavigate }) {
-  const score = r.overall_risk_score ?? r.risk_score ?? r.score ?? 0;
-  const level = r.risk_level ?? r.level ?? 'Unknown';
-  const explanation = r.score_explanation ?? r.explanation;
-  const scoreColor =
-    level === 'Critical' || level === 'High' ? 'var(--red)' :
-    level === 'Medium' ? 'var(--yellow)' :
-    level === 'Informational' || score === 0 ? 'var(--green)' : 'var(--blue)';
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-      padding: '0.5rem 0.75rem',
-      backgroundColor: 'var(--bg-surface)',
-      border: '1px solid var(--border)', borderRadius: 8,
-    }}>
-      <div style={{ textAlign: 'center', flexShrink: 0, minWidth: 54 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{score}</div>
-        <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600 }}>{level}</div>
-      </div>
-      <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {r.filename && (
-            <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
-              📁 {r.filename}
-            </span>
-          )}
-          {r.created_at && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{fmtDate(r.created_at)}</span>
-          )}
-        </div>
-        {explanation && (
-          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-            {explanation}
-          </p>
-        )}
-      </div>
-      {r.analysis_id && (
-        <button type="button" onClick={onNavigate} style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          padding: '0.25rem 0.55rem', borderRadius: 6,
-          border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-          color: 'var(--blue)', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-        }}>
-          View <ArrowRight size={10} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SkippedRuleRow({ rule: s }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8,
-      padding: '0.5rem 0.75rem',
-      backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 7,
-    }}>
-      <XCircle size={13} style={{ color: 'var(--text-muted)', marginTop: 2, flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {s.rule}
-          </span>
-          {s.count > 1 && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>
-              ({s.count} sessions)
-            </span>
-          )}
-        </div>
-        {s.reason && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{s.reason}</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BeaconingRow({ anomaly: a, onNavigate }) {
-  const isHigh = a.anomaly_level === 'HIGH';
-  const levelColor = isHigh ? 'var(--red)' : 'var(--yellow-text)';
-
-  return (
-    <div style={{
-      padding: '0.75rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)',
-      border: `1px solid ${isHigh ? 'var(--red-border)' : 'var(--border)'}`,
-      borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{a.title}</span>
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
-          backgroundColor: isHigh ? 'var(--red-light)' : 'var(--yellow-light)',
-          color: levelColor,
-          border: `1px solid ${isHigh ? 'var(--red-border)' : 'var(--yellow-border)'}`,
-        }}>
-          {a.anomaly_level}
-        </span>
-        <ObsBadge type={a.observation_type || 'Inferred'} />
-      </div>
-      {a.description && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{a.description}</p>
-      )}
-      {a.evidence && (
-        <div style={{
-          fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)',
-          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '0.35rem 0.6rem',
-        }}>
-          🔗 Observed timing evidence: {a.evidence}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)' }}>
-        {a.anomaly_score !== undefined && (
-          <span>Anomaly score: <strong style={{ color: 'var(--text-secondary)' }}>{a.anomaly_score}</strong></span>
-        )}
-        {a.beacon_detected !== undefined && (
-          <span>Beacon detected: <strong style={{ color: a.beacon_detected ? 'var(--red)' : 'var(--green)' }}>
-            {a.beacon_detected ? 'Yes' : 'No'}
-          </strong></span>
-        )}
-        {a.estimated_interval_sec !== undefined && (
-          <span>Est. interval: <strong style={{ color: 'var(--text-secondary)' }}>{a.estimated_interval_sec}s</strong></span>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        {a.filename && (
-          <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>📁 {a.filename}</div>
-        )}
-        <button type="button" onClick={onNavigate} style={{
-          marginLeft: 'auto',
-          display: 'flex', alignItems: 'center', gap: 4,
-          padding: '0.3rem 0.6rem', borderRadius: 6,
-          border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-          color: 'var(--blue)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-        }}>
-          View Analysis <ArrowRight size={10} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function BeaconingContextRow({ summary: b, onNavigate }) {
-  return (
-    <div style={{
-      padding: '0.65rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)',
-      borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 4,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
-          {b.verdict || 'Timing Summary'}
-        </span>
-        {b.anomaly_level && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)' }}>
-            {b.anomaly_level} (score {b.anomaly_score ?? '—'})
-          </span>
-        )}
-        {onNavigate && (
-          <button type="button" onClick={onNavigate} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '0.2rem 0.5rem', borderRadius: 5,
-            border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-            color: 'var(--blue)', fontSize: 10, fontWeight: 600, cursor: 'pointer',
-          }}>
-            View <ArrowRight size={9} />
-          </button>
-        )}
-      </div>
-      {b.filename && (
-        <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>📁 {b.filename}</div>
-      )}
-      {b.explanation && (
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{b.explanation}</p>
-      )}
-    </div>
-  );
-}
-
-function MLExplainRow({ ml, onNavigate }) {
-  const rawConf = ml.confidence_score ?? ml.confidence;
-  const conf = typeof rawConf === 'number' ? (rawConf > 1 ? rawConf / 100 : rawConf) : null;
-  const isLow = conf !== null && conf < 0.5;
-  const missing = ml.features_required_missing ?? [];
-
-  return (
-    <div style={{
-      padding: '0.75rem 0.875rem',
-      backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)',
-      borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)' }}>
-          {ml.predicted_category ?? 'Unknown'}
-        </span>
-        <span style={{
-          fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 9999,
-          backgroundColor: isLow ? 'var(--yellow-light)' : 'var(--blue-light)',
-          color: isLow ? 'var(--yellow-text)' : 'var(--blue)',
-          border: `1px solid ${isLow ? 'var(--yellow-border)' : 'var(--blue-border)'}`,
-        }}>
-          {conf !== null ? `${(conf * 100).toFixed(1)}% confidence` : ml.confidence_level ?? '—'}
-        </span>
-        {ml.model_status && (
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>({ml.model_status})</span>
-        )}
-        {ml.filename && (
-          <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-            📁 {ml.filename}
-          </span>
-        )}
-      </div>
-      {ml.summary && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{ml.summary}</p>
-      )}
-      {ml.model_note && (
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--yellow-text)', lineHeight: 1.5 }}>
-          ⚠️ Limitation: {ml.model_note}
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList(idx);
+      return;
+    }
+    if (line.startsWith('### ')) {
+      flushList(idx);
+      elements.push(
+        <h4 key={idx} style={{ margin: '0.5rem 0 0.25rem', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {renderInline(line.slice(4))}
+        </h4>
+      );
+    } else if (line.startsWith('## ') || line.startsWith('# ')) {
+      flushList(idx);
+      const text = line.replace(/^#{1,2}\s+/, '');
+      elements.push(
+        <h3 key={idx} style={{ margin: '0.5rem 0 0.25rem', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {renderInline(text)}
+        </h3>
+      );
+    } else if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      listItems.push(line.replace(/^([-*•]|\d+\.)\s+/, ''));
+    } else {
+      flushList(idx);
+      elements.push(
+        <p key={idx} style={{ margin: '0.25rem 0', fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
+          {renderInline(line)}
         </p>
-      )}
-      {missing.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          Missing features: <span style={{ fontFamily: 'monospace' }}>{missing.join(', ')}</span>
-        </div>
-      )}
-      {(ml.top_contributing_factors ?? []).length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 3 }}>Top contributing factors:</div>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {(ml.top_contributing_factors ?? []).map((fc, i) => (
-              <li key={i} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                {typeof fc === 'object' && fc !== null ? (
-                  <>
-                    <strong>{fc.feature_name ?? fc.feature_key ?? 'Feature'}</strong>
-                    {fc.observed_value !== undefined && ` (${fc.observed_value})`}
-                    {fc.impact_percentage !== undefined && ` — ${fc.impact_percentage}% impact`}
-                    {fc.reason && `: ${fc.reason}`}
-                  </>
-                ) : (
-                  fc
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {onNavigate && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onNavigate} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '0.25rem 0.55rem', borderRadius: 6,
-            border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-            color: 'var(--blue)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}>
-            View Analysis <ArrowRight size={10} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
+      );
+    }
+  });
+  flushList('end');
+
+  return <div>{elements}</div>;
 }
 
-function EmptyAdvisor({ onAnalyze }) {
+export default function AdvisorPage() {
+  const navigate = useNavigate();
+  const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const [analyses, setAnalyses] = useState([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState('');
+  const [status, setStatus] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+
+  const [loadingInit, setLoadingInit] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [failedPrompt, setFailedPrompt] = useState(null);
+
+  // Stage 3: attachment state
+  // shape: { file, previewUrl, extractedText, status, filename, message } | null
+  const [attachment, setAttachment] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const loadStatus = () => {
+    api.advisorStatus()
+      .then((s) => setStatus(s))
+      .catch(() => setStatus({ ollama_connected: false, detail: 'Unable to reach advisor status endpoint.' }));
+  };
+
+  useEffect(() => {
+    setLoadingInit(true);
+    Promise.all([
+      api.history().catch(() => []),
+      api.advisorStatus().catch(() => ({ ollama_connected: false, detail: 'Status check failed.' })),
+    ]).then(([hist, st]) => {
+      setAnalyses(Array.isArray(hist) ? hist : []);
+      setStatus(st);
+    }).finally(() => setLoadingInit(false));
+  }, []);
+
+  useEffect(() => {
+    setLoadingHistory(true);
+    setError(null);
+    setFailedPrompt(null);
+    api.advisorHistory(selectedAnalysisId || null)
+      .then((res) => setMessages(res.messages ?? []))
+      .catch((e) => setError(e?.message ?? 'Failed to load conversation history.'))
+      .finally(() => setLoadingHistory(false));
+  }, [selectedAnalysisId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, sending]);
+
+  const selectedAnalysis = analyses.find((a) => a.id === selectedAnalysisId) || null;
+
+  // ── File Upload Handler ─────────────────────────────────────────────────────
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!e.target) return;
+    // Reset so the same file can be re-selected after removal
+    e.target.value = '';
+    if (!file) return;
+
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    const isPdf = ALLOWED_PDF_EXTS.has(ext);
+    const isImage = ALLOWED_IMAGE_EXTS.has(ext);
+    if (!isPdf && !isImage) {
+      setUploadError(`Unsupported file type "${ext}". Allowed: JPG, JPEG, PNG, WEBP, PDF.`);
+      return;
+    }
+
+    setUploadError(null);
+    setAttachment(null);
+    setUploading(true);
+
+    const previewUrl = isImage ? URL.createObjectURL(file) : null;
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const result = isPdf
+        ? await api.advisorUploadPdf(form)
+        : await api.advisorUpload(form);
+      setAttachment({
+        filename: result.filename || file.name,
+        fileType: result.file_type || (isPdf ? 'pdf' : 'image'),
+        pageCount: result.page_count || null,
+        truncated: Boolean(result.truncated),
+        previewUrl,
+        extractedText: result.extracted_text || '',
+        status: result.status,
+        message: result.message || '',
+        ok: result.ok,
+      });
+    } catch (err) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploadError(err?.message ?? 'File upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAttachment = () => {
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+    setUploadError(null);
+  };
+
+  const sendMessage = async (textOverride) => {
+    const q = (textOverride ?? input).trim();
+    if (!q || sending) return;
+
+    setError(null);
+    setFailedPrompt(null);
+    if (!textOverride) setInput('');
+
+    // Build attachment_context from successful extraction (ok === true)
+    const attachCtx = (attachment?.ok && attachment.extractedText)
+      ? {
+          filename: attachment.filename,
+          file_type: attachment.fileType || 'image',
+          extracted_text: attachment.extractedText,
+          page_count: attachment.pageCount,
+          truncated: attachment.truncated,
+        }
+      : null;
+
+    const attachLabel = attachment?.fileType === 'pdf' ? 'PDF' : 'Image';
+    const optimisticUser = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: q + (attachCtx ? ` [${attachLabel}: ${attachment.filename}]` : ''),
+      references: [],
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticUser]);
+    setSending(true);
+
+    // Clear attachment after sending (one-shot context)
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+
+    try {
+      const res = await api.advisorChat(q, selectedAnalysisId || null, attachCtx);
+      const assistantMsg = {
+        id: res.message_id ?? `asst-${Date.now()}`,
+        role: 'assistant',
+        content: res.answer,
+        references: res.references ?? [],
+        model: res.model,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (e) {
+      setError(e?.message ?? 'Failed to generate response.');
+      setFailedPrompt(q);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (sending) return;
+    try {
+      await api.advisorClear(selectedAnalysisId || null);
+      setMessages([]);
+      setError(null);
+      setFailedPrompt(null);
+    } catch (e) {
+      setError(e?.message ?? 'Failed to clear conversation.');
+    }
+  };
+
+  const modelReady = status?.ollama_connected && status?.chat_model_available && status?.embed_model_available;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 960, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 9,
-          backgroundColor: 'var(--blue-light)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '1px solid var(--blue-border)', flexShrink: 0,
-        }}>
-          <Sparkles size={18} style={{ color: 'var(--blue)' }} />
-        </div>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-          AI Security Advisor
-        </h1>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 960, margin: '0 auto' }}>
+
+      {/* ── Header ────────────────────────────────────────── */}
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '3rem 1.5rem', textAlign: 'center', gap: 12,
-        backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12,
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '1rem 1.25rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.875rem',
       }}>
-        <Sparkles size={32} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-          No analyses yet
-        </p>
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', maxWidth: 360 }}>
-          Upload a PCAP file to generate security findings, risk summaries and behavioral insights
-          that the advisor will explain here.
-        </p>
-        <button type="button" onClick={onAnalyze} style={{
-          marginTop: 8, padding: '0.5rem 1.25rem', borderRadius: 7,
-          border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
-          color: 'var(--blue)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9,
+            backgroundColor: 'var(--blue-light)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid var(--blue-border)', flexShrink: 0,
+          }}>
+            <Sparkles size={18} style={{ color: 'var(--blue)' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+              IPsec Security Assistant
+            </h1>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+              RAG-powered security chatbot grounded in your PCAP findings, timeline events, beaconing telemetry, and ML explainability.
+            </p>
+          </div>
+
+          {/* Model Connection Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
+              backgroundColor: modelReady ? 'var(--green-light)' : 'var(--red-light)',
+              color: modelReady ? 'var(--green-text)' : 'var(--red-text)',
+              border: `1px solid ${modelReady ? 'var(--green-border)' : 'var(--red-border)'}`,
+            }}>
+              {modelReady ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+              {status === null
+                ? 'Checking model…'
+                : modelReady
+                  ? `Ollama Connected (${status.chat_model})`
+                  : status.detail || 'Ollama Disconnected'}
+            </div>
+            <button
+              type="button"
+              onClick={loadStatus}
+              title="Refresh model status"
+              style={{
+                padding: '5px', borderRadius: 6,
+                border: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center',
+              }}
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Analysis Selector & Clear Controls ────────────── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          paddingTop: '0.75rem', borderTop: '1px solid var(--border)',
         }}>
-          Analyze PCAP
-        </button>
+          <label htmlFor="advisor-analysis-select" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Context Scope:
+          </label>
+          <select
+            id="advisor-analysis-select"
+            value={selectedAnalysisId}
+            onChange={(e) => setSelectedAnalysisId(e.target.value)}
+            disabled={loadingInit || sending}
+            style={{
+              flex: '1 1 260px',
+              padding: '0.42rem 0.75rem',
+              borderRadius: 7,
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+            }}
+          >
+            <option value="">All My Analyses ({analyses.length})</option>
+            {analyses.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.filename} — {a.id.slice(0, 8)} ({a.risk_level || 'Unknown'})
+              </option>
+            ))}
+          </select>
+
+          {selectedAnalysis && (
+            <button
+              type="button"
+              onClick={() => navigate(`/analysis/${selectedAnalysis.id}`)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '0.4rem 0.7rem', borderRadius: 7,
+                border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
+                color: 'var(--blue)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              <FileText size={12} /> {selectedAnalysis.filename} ({selectedAnalysis.id.slice(0, 8)}) <ArrowRight size={11} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={sending || messages.length === 0}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '0.4rem 0.7rem', borderRadius: 7,
+              border: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)',
+              color: messages.length === 0 ? 'var(--text-faint)' : 'var(--text-secondary)',
+              fontSize: 11, fontWeight: 600,
+              cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
+              marginLeft: 'auto',
+            }}
+          >
+            <Trash2 size={12} /> Clear Chat
+          </button>
+        </div>
       </div>
+
+      {/* ── Suggested Questions ───────────────────────────── */}
+      <div style={{
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '0.75rem 1rem',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>
+          Suggested Questions
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SUGGESTED_QUESTIONS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              disabled={sending}
+              onClick={() => sendMessage(q)}
+              style={{
+                padding: '0.32rem 0.65rem',
+                borderRadius: 9999,
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-secondary)',
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: sending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Chat Transcript ───────────────────────────────── */}
+      <div style={{
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '1rem 1.25rem',
+        minHeight: 340,
+        maxHeight: '55vh',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.875rem',
+      }}>
+        {loadingHistory ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading conversation…
+          </div>
+        ) : messages.length === 0 ? (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', padding: '2.5rem 1rem', gap: 8,
+          }}>
+            <MessageSquare size={28} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Ask about your IPsec PCAP analyses
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', maxWidth: 420 }}>
+              {analyses.length === 0
+                ? 'Upload a PCAP file first, or ask a general IPsec question below.'
+                : `Retrieving evidence from ${selectedAnalysis ? `${selectedAnalysis.filename} (${selectedAnalysis.id.slice(0, 8)})` : `all ${analyses.length} of your analyses`}.`}
+            </p>
+          </div>
+        ) : (
+          messages.map((m) => (
+            <ChatBubble key={m.id} message={m} navigate={navigate} />
+          ))
+        )}
+
+        {sending && (
+          <div style={{
+            alignSelf: 'flex-start',
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '0.65rem 0.9rem',
+            borderRadius: 10,
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            fontSize: 12,
+            color: 'var(--text-muted)',
+          }}>
+            <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+            Retrieving PCAP evidence and generating response…
+          </div>
+        )}
+
+        {error && (
+          <div style={{
+            padding: '0.75rem 0.9rem',
+            borderRadius: 8,
+            backgroundColor: 'var(--red-light)',
+            border: '1px solid var(--red-border)',
+            color: 'var(--red-text)',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{error}</span>
+            {failedPrompt && (
+              <button
+                type="button"
+                onClick={() => sendMessage(failedPrompt)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '0.25rem 0.6rem', borderRadius: 6,
+                  border: '1px solid var(--red-border)', backgroundColor: 'var(--bg-card)',
+                  color: 'var(--red-text)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <RotateCcw size={11} /> Retry
+              </button>
+            )}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* ── Input Form ────────────────────────────────────── */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '0.625rem 0.75rem',
+        }}
+      >
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp,.pdf"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+
+        {/* Upload error */}
+        {uploadError && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+            padding: '4px 8px', borderRadius: 6,
+            backgroundColor: 'var(--red-light)', border: '1px solid var(--red-border)',
+            color: 'var(--red-text)',
+          }}>
+            <AlertTriangle size={12} />
+            <span style={{ flex: 1 }}>{uploadError}</span>
+            <button type="button" onClick={() => setUploadError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red-text)' }}>
+              <XIcon size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* Uploading spinner */}
+        {uploading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+            <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+            Uploading and extracting text…
+          </div>
+        )}
+
+        {/* Attachment preview chip */}
+        {attachment && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            padding: '5px 10px', borderRadius: 7,
+            border: `1px solid ${attachment.ok ? 'var(--green-border)' : attachment.status === 'ocr_unavailable' ? 'var(--yellow-border)' : 'var(--border)'}`,
+            backgroundColor: attachment.ok ? 'var(--green-light)' : attachment.status === 'ocr_unavailable' ? 'var(--yellow-light)' : 'var(--bg-surface)',
+            fontSize: 11,
+          }}>
+            {attachment.fileType === 'pdf'
+              ? <FileText size={12} style={{ flexShrink: 0 }} />
+              : <ImageIcon size={12} style={{ flexShrink: 0 }} />}
+            <span style={{ fontWeight: 600 }}>{attachment.filename}</span>
+            {attachment.ok && (
+              <span style={{ color: 'var(--green-text)' }}>
+                ✓ {attachment.extractedText.length} chars extracted
+                {attachment.pageCount ? ` (${attachment.pageCount}p)` : ''}
+                {attachment.truncated ? ' — truncated' : ''}
+              </span>
+            )}
+            {attachment.status === 'ocr_unavailable' && (
+              <span style={{ color: 'var(--yellow-text)' }}>⚠ Tesseract not installed — text extraction unavailable</span>
+            )}
+            {attachment.status === 'page_limit_exceeded' && (
+              <span style={{ color: 'var(--red-text)' }}>⚠ {attachment.message || 'PDF exceeds 50-page limit'}</span>
+            )}
+            {(attachment.status === 'encrypted' || attachment.status === 'empty') && (
+              <span style={{ color: 'var(--red-text)' }}>⚠ {attachment.message}</span>
+            )}
+            {attachment.status === 'no_text_found' && (
+              <span style={{ color: 'var(--text-muted)' }}>No readable text detected</span>
+            )}
+            {attachment.status === 'unreadable' && (
+              <span style={{ color: 'var(--text-muted)' }}>Could not extract text — try a clearer file</span>
+            )}
+            <button
+              type="button"
+              onClick={removeAttachment}
+              title="Remove attachment"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', marginLeft: 'auto', display: 'flex', alignItems: 'center' }}
+            >
+              <XIcon size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* Text input row */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Paperclip / attach button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || uploading}
+            title="Attach image or PDF (JPG, JPEG, PNG, WEBP, PDF)"
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, flexShrink: 0,
+              borderRadius: 7, border: '1px solid var(--border)',
+              backgroundColor: attachment ? 'var(--blue-light)' : 'var(--bg-surface)',
+              color: attachment ? 'var(--blue)' : 'var(--text-muted)',
+              cursor: (sending || uploading) ? 'not-allowed' : 'pointer',
+              opacity: (sending || uploading) ? 0.5 : 1,
+            }}
+          >
+            <Paperclip size={15} />
+          </button>
+
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about findings, encryption, DH group, risk score, skipped rules, or packets…"
+            disabled={sending}
+            style={{
+              flex: 1,
+              border: '1px solid var(--border)',
+              borderRadius: 7,
+              padding: '0.5rem 0.75rem',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+            }}
+          />
+          <button
+            type="submit"
+            disabled={sending || (!input.trim() && !attachment)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '0.5rem 1rem',
+              borderRadius: 7,
+              border: '1px solid var(--blue-border)',
+              backgroundColor: 'var(--blue-light)',
+              color: 'var(--blue)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: (sending || (!input.trim() && !attachment)) ? 'not-allowed' : 'pointer',
+              opacity: (sending || (!input.trim() && !attachment)) ? 0.6 : 1,
+            }}
+          >
+            {sending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
+            Send
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ChatBubble({ message: m, navigate }) {
+  const isUser = m.role === 'user';
+  const refs = m.references || [];
+
+  return (
+    <div style={{
+      alignSelf: isUser ? 'flex-end' : 'flex-start',
+      maxWidth: isUser ? '78%' : '92%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+      padding: '0.75rem 1rem',
+      borderRadius: 10,
+      backgroundColor: isUser ? 'var(--blue-light)' : 'var(--bg-surface)',
+      border: `1px solid ${isUser ? 'var(--blue-border)' : 'var(--border)'}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: 'var(--text-muted)' }}>
+        <strong style={{ color: isUser ? 'var(--blue)' : 'var(--text-secondary)' }}>
+          {isUser ? 'You' : 'IPsec Security Assistant'}
+        </strong>
+        {m.model && <span>({m.model})</span>}
+        {m.created_at && <span style={{ marginLeft: 'auto' }}>{fmtDate(m.created_at)}</span>}
+      </div>
+
+      {isUser ? (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>{m.content}</p>
+      ) : (
+        <MarkdownBlock content={m.content} />
+      )}
+
+      {/* Evidence References */}
+      {!isUser && refs.length > 0 && (
+        <div style={{
+          marginTop: 4,
+          paddingTop: 6,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 5,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Evidence References
+          </div>
+          {refs.map((r) => (
+            <div key={r.analysis_id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+              <button
+                type="button"
+                onClick={() => navigate(`/analysis/${r.analysis_id}`)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 7px', borderRadius: 5,
+                  border: '1px solid var(--blue-border)', backgroundColor: 'var(--blue-light)',
+                  color: 'var(--blue)', fontSize: 10, fontFamily: 'monospace', cursor: 'pointer',
+                }}
+              >
+                <FileText size={10} /> {r.filename} ({r.analysis_id.slice(0, 8)}) <ArrowRight size={9} />
+              </button>
+
+              {(r.finding_ids || []).map((fid) => (
+                <button
+                  key={fid}
+                  type="button"
+                  onClick={() => navigate('/findings')}
+                  title={`Open Findings page (${fid})`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    padding: '2px 6px', borderRadius: 5,
+                    border: '1px solid var(--yellow-border)', backgroundColor: 'var(--yellow-light)',
+                    color: 'var(--yellow-text)', fontSize: 10, fontFamily: 'monospace', fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  <Shield size={9} /> {fid}
+                </button>
+              ))}
+
+              {(r.packet_numbers || []).length > 0 && (
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+                  Packets: #{r.packet_numbers.slice(0, 8).join(', #')}
+                  {r.packet_numbers.length > 8 ? '…' : ''}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

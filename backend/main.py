@@ -4,14 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import routes
 from api.auth_routes import auth_router
+from api.advisor_routes import advisor_router
 from core.database import init_db
 from core.auth import init_auth_tables
+from core.rag_chat import init_advisor_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     init_auth_tables()
+    init_advisor_tables()
     yield
 
 
@@ -45,6 +48,7 @@ app.add_middleware(
 
 app.include_router(routes.router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(advisor_router, prefix="/api")
 
 
 @app.get("/")

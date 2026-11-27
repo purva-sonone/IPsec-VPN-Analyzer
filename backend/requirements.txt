@@ -10,3 +10,12 @@ pydantic
 joblib
 pymongo
 dnspython
+chromadb
+httpx
+pytesseract
+Pillow
+pymupdf
+
+httpx
+pytesseract
+Pillow

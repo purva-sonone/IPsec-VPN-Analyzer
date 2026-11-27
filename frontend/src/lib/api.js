@@ -58,6 +58,22 @@ export const api = {
   history:    ()     => request(`${BASE}/history`),
   stats:      ()     => request(`${BASE}/history/stats`),
   findings:   ()     => request(`${BASE}/findings`),
+  advisorStatus: ()  => request(`${BASE}/advisor/status`),
+  advisorHistory: (analysisId) => {
+    const q = analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : '';
+    return request(`${BASE}/advisor/history${q}`);
+  },
+  advisorChat: (message, analysisId, attachmentContext = null) => request(`${BASE}/advisor/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, analysis_id: analysisId || null, attachment_context: attachmentContext || null }),
+  }),
+  advisorClear: (analysisId) => {
+    const q = analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : '';
+    return request(`${BASE}/advisor/clear${q}`, { method: 'DELETE' });
+  },
+  advisorUpload: (formData) => request(`${BASE}/advisor/upload`, { method: 'POST', body: formData }),
+  advisorUploadPdf: (formData) => request(`${BASE}/advisor/upload_pdf`, { method: 'POST', body: formData }),
   getById:    (id)   => request(`${BASE}/history/${id}`),
   deleteById: (id)   => request(`${BASE}/history/${id}`, { method: 'DELETE' }),
   demoAnalyze: ()    => request(`${BASE}/sample/demo-analyze`, { method: 'POST' }),
