@@ -82,13 +82,15 @@ def _use_hash_fallback() -> bool:
     """
     Use local scikit-learn hashing embeddings when:
     - EMBED_BACKEND=hash, OR
-    - GROQ_API_KEY is set and Ollama is not reachable (e.g. Render cloud).
+    - Running in production (Render), OR
+    - Ollama is not reachable (regardless of chat backend).
     """
     if os.environ.get("EMBED_BACKEND", "").strip().lower() == "hash":
         return True
-    if os.environ.get("GROQ_API_KEY", "").strip():
-        return not is_ollama_reachable()
-    return False
+    if os.environ.get("PYTHON_ENV", "").strip().lower() == "production":
+        return True
+    # Always fall back to hash when Ollama is offline (saves 503 errors)
+    return not is_ollama_reachable()
 
 
 def get_chroma_collection(persist_dir: str | None = None, collection_name: str | None = None):
