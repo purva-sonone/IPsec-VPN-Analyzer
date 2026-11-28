@@ -12,7 +12,8 @@ import { fmtDate, sevColor } from '../lib/utils';
 // ─────────────────────────────────────────────────────────────
 const SEVERITIES = ['All', 'Critical', 'High', 'Medium', 'Low', 'Informational'];
 const STATUSES   = ['All', 'Action Required', 'Informational'];
-const SORTS      = ['Newest First', 'Oldest First'];
+const SORTS      = ['Severity (High First)', 'Newest First', 'Oldest First'];
+const SEV_RANK   = { Critical: 0, High: 1, Medium: 2, Low: 3, Informational: 4 };
 
 function statusColor(status) {
   if (status === 'Action Required') return 'badge-high';
@@ -40,7 +41,7 @@ export default function FindingsPage() {
   const [query,    setQuery]    = useState('');
   const [severity, setSeverity] = useState('All');
   const [status,   setStatus]   = useState('All');
-  const [sort,     setSort]     = useState('Newest First');
+  const [sort,     setSort]     = useState('Severity (High First)');
 
   useEffect(() => {
     setLoading(true);
@@ -76,6 +77,12 @@ export default function FindingsPage() {
     list.sort((a, b) => {
       const ta = new Date(a.created_at ?? 0).getTime();
       const tb = new Date(b.created_at ?? 0).getTime();
+      if (sort === 'Severity (High First)') {
+        const ra = SEV_RANK[a.severity] ?? 99;
+        const rb = SEV_RANK[b.severity] ?? 99;
+        if (ra !== rb) return ra - rb;
+        return tb - ta;
+      }
       return sort === 'Newest First' ? tb - ta : ta - tb;
     });
 

@@ -31,7 +31,7 @@ function MetricCard({ icon: Icon, label, value }) {
         <Icon style={{ width: 11, height: 11, color: '#94A3B8' }} />
         <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94A3B8' }}>{label}</span>
       </div>
-      <p style={{ fontSize: 13, fontWeight: 600, color: empty ? '#94A3B8' : '#0F172A', fontStyle: empty ? 'italic' : 'normal' }}>
+      <p style={{ fontSize: 13, fontWeight: 600, color: empty ? '#94A3B8' : 'var(--text-primary)', fontStyle: empty ? 'italic' : 'normal' }}>
         {empty ? 'Not Extracted' : value}
       </p>
     </div>
@@ -46,7 +46,7 @@ function CryptoRow({ label, value }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid #F1F5F9' }}>
       <span style={{ fontSize: 13, color: '#64748B', flexShrink: 0 }}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: '1rem' }}>
-        <span style={{ fontSize: 13, fontWeight: 500, textAlign: 'right', maxWidth: 240, color: empty ? '#94A3B8' : '#0F172A', fontStyle: empty ? 'italic' : 'normal' }}>
+        <span style={{ fontSize: 13, fontWeight: 500, textAlign: 'right', maxWidth: 240, color: empty ? '#94A3B8' : 'var(--text-primary)', fontStyle: empty ? 'italic' : 'normal' }}>
           {empty ? 'Not Extracted' : value}
         </span>
         {strength && <span className={strength.cls}>{strength.label}</span>}
@@ -77,7 +77,7 @@ function FindingCard({ f }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {SEV_ICON[f.severity] || SEV_ICON.Informational}
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{f.title}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{f.title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {f.risk_contribution > 0 && (
@@ -103,8 +103,8 @@ function FindingCard({ f }) {
         }}>
           <FileSearch style={{ width: 14, height: 14, color: '#2563EB', flexShrink: 0, marginTop: 2 }} />
           <div style={{ fontSize: 11, lineHeight: 1.55 }}>
-            <span style={{ fontWeight: 600, color: '#334155' }}>PCAP Evidence: </span>
-            <span style={{ color: '#0F172A', fontFamily: 'monospace' }}>{f.evidence}</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>PCAP Evidence: </span>
+            <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>{f.evidence}</span>
           </div>
         </div>
       )}
@@ -163,7 +163,7 @@ function RuleAudit({ evaluated = [], skipped = [] }) {
 
             return (
               <tr key={`ev-${i}`} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                <td style={{ padding: '0.625rem 0.875rem', fontWeight: 500, color: '#0F172A' }}>{r.rule}</td>
+                <td style={{ padding: '0.625rem 0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>{r.rule}</td>
                 <td style={{ padding: '0.625rem 0.875rem', color: '#475569', fontFamily: 'monospace' }}>{r.observed_value || '—'}</td>
                 <td style={{ padding: '0.625rem 0.875rem' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, fontSize: 11, color }}>
@@ -333,7 +333,7 @@ function PacketSizeDistribution({ distribution = [], stats = {} }) {
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
           <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Min Size</p>
-          <p style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{stats?.min_size ?? 0} B</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{stats?.min_size ?? 0} B</p>
         </div>
         <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
           <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Average Size</p>
@@ -341,7 +341,7 @@ function PacketSizeDistribution({ distribution = [], stats = {} }) {
         </div>
         <div style={{ padding: '0.5rem 0.875rem', borderRadius: 6, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', flex: 1 }}>
           <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase' }}>Max Size</p>
-          <p style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{stats?.max_size ?? 0} B</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{stats?.max_size ?? 0} B</p>
         </div>
       </div>
 
@@ -352,7 +352,7 @@ function PacketSizeDistribution({ distribution = [], stats = {} }) {
           return (
             <div key={d.bin} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                <span style={{ fontWeight: 600, color: '#334155' }}>{d.bin}</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{d.bin}</span>
                 <span style={{ color: '#64748B' }}>
                   {d.count} pkts ({d.percentage}%)
                 </span>
@@ -402,7 +402,7 @@ function MLProbaTooltip({ active, payload }) {
       backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0',
       boxShadow: '0 2px 6px rgba(15,23,42,0.08)',
     }}>
-      <span style={{ fontWeight: 700, color: ML_COLORS[d.name] || '#334155' }}>{d.name}</span>
+      <span style={{ fontWeight: 700, color: ML_COLORS[d.name] || 'var(--text-secondary)' }}>{d.name}</span>
       <span style={{ color: '#64748B', marginLeft: 8 }}>{d.value}%</span>
     </div>
   );
@@ -441,7 +441,7 @@ function ClassProbabilityCard({ ml }) {
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', borderRadius: 8, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', marginTop: '0.75rem' }}>
             <AlertCircle style={{ width: 15, height: 15, color: '#64748B', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>Classification Not Applicable</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2 }}>Classification Not Applicable</p>
               <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6, margin: 0 }}>{model_note}</p>
             </div>
           </div>
@@ -876,7 +876,7 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
             <Radio style={{ width: 16, height: 16, color: isHigh ? '#DC2626' : '#2563EB' }} />
           </div>
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', margin: 0 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               C2 Beaconing & Timing Anomaly Analysis
             </h4>
             <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>
@@ -912,14 +912,14 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
 
         <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Timing Regularity</span>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
             {beaconing.timing_regularity_pct}%
           </div>
         </div>
 
         <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Estimated Interval</span>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginTop: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginTop: 6 }}>
             {beaconing.estimated_interval_sec != null ? `~${beaconing.estimated_interval_sec}s` : 'N/A'}
           </div>
           {beaconing.jitter_sec != null && (
@@ -929,7 +929,7 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
 
         <div style={{ padding: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', textAlign: 'center' }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Sample & Confidence</span>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 6 }}>
             {beaconing.confidence_level || 'MODERATE'}
           </div>
           {intervalsCount != null && (
@@ -945,7 +945,7 @@ function BeaconingAnalysisCard({ beaconing: rawBeaconing, packets }) {
         backgroundColor: isHigh ? '#FEF2F2' : '#F1F5F9',
         borderLeft: `3px solid ${isHigh ? '#DC2626' : '#64748B'}`
       }}>
-        <p style={{ fontSize: 12, fontWeight: 600, color: isHigh ? '#991B1B' : '#0F172A', margin: '0 0 4px 0' }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: isHigh ? '#991B1B' : 'var(--text-primary)', margin: '0 0 4px 0' }}>
           {beaconing.verdict}
         </p>
         <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
@@ -1059,7 +1059,7 @@ function ObservationBadge({ observationType }) {
             maxWidth: 230,
             padding: '6px 9px',
             borderRadius: 6,
-            backgroundColor: '#0F172A',
+            backgroundColor: 'var(--text-primary)',
             color: '#F8FAFC',
             fontSize: 11,
             fontWeight: 500,
@@ -1197,7 +1197,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 4,
-              border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#334155',
+              border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: 'var(--text-secondary)',
               cursor: 'pointer',
             }}
             title="Toggle chronological sort order"
@@ -1291,7 +1291,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                           <ProtoIcon style={{ width: 11, height: 11 }} />
                           {evt.protocol}
                         </span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
                           {evt.event_type}
                         </span>
                         <ObservationBadge observationType={evt.observation_type} />
@@ -1301,7 +1301,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                         {evt.relative_time && evt.timestamp !== evt.relative_time && (
                           <span style={{ color: '#94A3B8' }}>{evt.relative_time}</span>
                         )}
-                        <span style={{ fontWeight: 600, color: '#334155' }}>{evt.timestamp}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{evt.timestamp}</span>
                         <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: 4 }}>
                           #{evt.packet_number}
                         </span>
@@ -1312,7 +1312,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                      <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
                         {evt.description}
                       </p>
                       <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748B' }}>
@@ -1342,7 +1342,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.5rem' }}>
                           <div>
                             <span style={{ color: '#64748B', fontWeight: 600 }}>Packet Size: </span>
-                            <span style={{ color: '#0F172A' }}>{evt.length} bytes</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{evt.length} bytes</span>
                           </div>
                           {det.ike_exchange && (
                             <div>
@@ -1353,7 +1353,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                           {det.ike_msg_id != null && (
                             <div>
                               <span style={{ color: '#64748B', fontWeight: 600 }}>Message ID: </span>
-                              <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.ike_msg_id}</span>
+                              <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{det.ike_msg_id}</span>
                             </div>
                           )}
                           {det.esp_spi && (
@@ -1365,7 +1365,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                           {det.esp_seq && (
                             <div>
                               <span style={{ color: '#64748B', fontWeight: 600 }}>ESP Seq: </span>
-                              <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.esp_seq}</span>
+                              <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{det.esp_seq}</span>
                             </div>
                           )}
                           {det.dns_query && (
@@ -1378,7 +1378,7 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
                         {det.layers && det.layers.length > 0 && (
                           <div>
                             <span style={{ color: '#64748B', fontWeight: 600 }}>Layers: </span>
-                            <span style={{ color: '#0F172A', fontWeight: 500 }}>{det.layers.join(' ➔ ')}</span>
+                            <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{det.layers.join(' ➔ ')}</span>
                           </div>
                         )}
                         {onInspectPacket && (
@@ -1411,6 +1411,104 @@ function NetworkForensicsTimeline({ events = [], totalCount = 0, onInspectPacket
   );
 }
 
+// ── IKE Handshake Flow Diagram (Web UI) ──────────────────────────────────────
+function IkeHandshakeFlowCard({ packets = [], ikeVersion = null }) {
+  const ikePkts = (packets || []).filter(
+    (p) => p && ['IKE', 'ISAKMP'].includes(String(p.protocol || '').toUpperCase())
+  );
+
+  if (ikePkts.length === 0) {
+    return (
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', padding: '0.5rem 0' }}>
+        No IKE/ISAKMP handshake packets were observed in this capture (Unavailable / Partial Capture).
+      </div>
+    );
+  }
+
+  const observed = ikePkts.map((p) => {
+    const det = p.details && typeof p.details === 'object' ? p.details : {};
+    const exch = det.ike_exchange || 'Unknown Exchange';
+    const isResp = det.ike_is_response;
+    const role = isResp === false ? 'Request' : isResp === true ? 'Response' : 'Unknown';
+    const pktNo = p.number ?? p.packet_no ?? '?';
+    const ts = p.timestamp || '—';
+    return { exchange: exch, role, pktNo, ts };
+  });
+
+  const ver = ikeVersion || 'Unknown';
+  const missing = [];
+  if (ver === 'IKEv2') {
+    for (const ex of ['IKE_SA_INIT', 'IKE_AUTH']) {
+      for (const rl of ['Request', 'Response']) {
+        if (!observed.some((o) => o.exchange === ex && o.role === rl)) {
+          missing.push(`${ex} ${rl}`);
+        }
+      }
+    }
+  } else if (ver === 'IKEv1') {
+    if (!observed.some((o) => ['Identity Protection (Main Mode)', 'Aggressive Mode'].includes(o.exchange))) {
+      missing.push('Phase 1 (Main Mode / Aggressive Mode)');
+    }
+    if (!observed.some((o) => o.exchange === 'Quick Mode')) {
+      missing.push('Phase 2 (Quick Mode)');
+    }
+  }
+
+  const statusLabel = missing.length > 0 ? 'Partial Capture' : 'Observed Exchanges Complete';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <span><strong>Protocol:</strong> {ver}</span>
+        <span>•</span>
+        <span><strong>Observed IKE Packets:</strong> {observed.length}</span>
+        <span>•</span>
+        <span><strong>Status:</strong> {statusLabel}</span>
+      </div>
+
+      <div style={{
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '0.875rem 1rem',
+        backgroundColor: 'var(--bg-subtle, rgba(148,163,184,0.06))',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.6rem',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+          <span>Initiator</span>
+          <span>Responder</span>
+        </div>
+
+        {observed.slice(0, 12).map((item, idx) => {
+          const isReq = item.role === 'Request';
+          const isRes = item.role === 'Response';
+          const color = isReq ? '#6366F1' : isRes ? '#10B981' : '#F59E0B';
+          const arrow = isReq ? '───▶' : isRes ? '◀───' : '┄┄┄┄';
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
+              <span style={{ color, fontWeight: 700, minWidth: 38 }}>{isReq ? 'REQ' : isRes ? 'RESP' : 'UNK'}</span>
+              <div style={{ flex: 1, textAlign: 'center', color: 'var(--text-primary)' }}>
+                <span style={{ fontWeight: 600 }}>Pkt #{item.pktNo}</span>{' '}
+                <span style={{ color: 'var(--text-muted)' }}>({item.ts})</span>{' '}
+                <span style={{ color, fontWeight: 700, margin: '0 6px' }}>{arrow}</span>{' '}
+                <span>{item.exchange}</span>
+              </div>
+              <span style={{ minWidth: 38 }} />
+            </div>
+          );
+        })}
+      </div>
+
+      {missing.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <strong>Not Observed / Unavailable ({statusLabel}):</strong> {missing.join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Packet-Level Forensics Table ───────────────────────────────────────────
 function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumber = null }) {
   const [filterProto, setFilterProto] = useState('ALL');
@@ -1430,14 +1528,21 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
   };
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return packets.filter(p => {
       const matchProto = filterProto === 'ALL' || p.protocol?.toUpperCase() === filterProto.toUpperCase();
+      const src = (p.src_ip ?? p.src ?? '').toString().toLowerCase();
+      const dst = (p.dst_ip ?? p.dst ?? '').toString().toLowerCase();
+      const info = (p.info ?? '').toString().toLowerCase();
+      const proto = (p.protocol ?? '').toString().toLowerCase();
+      const num = String(p.number ?? p.packet_no ?? p.frame_number ?? '');
       const matchSearch =
-        !searchQuery ||
-        p.src_ip?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.dst_ip?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.info?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(p.number).includes(searchQuery);
+        !q ||
+        src.includes(q) ||
+        dst.includes(q) ||
+        info.includes(q) ||
+        proto.includes(q) ||
+        num.includes(q);
       return matchProto && matchSearch;
     });
   }, [packets, filterProto, searchQuery]);
@@ -1551,10 +1656,10 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
                     <td style={{ padding: '0.5rem 0.625rem', color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
                       {pkt.timestamp}
                     </td>
-                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: '#0F172A' }}>
+                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: 'var(--text-primary)' }}>
                       {pkt.src_ip}
                     </td>
-                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: '#0F172A' }}>
+                    <td style={{ padding: '0.5rem 0.625rem', fontFamily: 'monospace', color: 'var(--text-primary)' }}>
                       {pkt.dst_ip}
                     </td>
                     <td style={{ padding: '0.5rem 0.625rem' }}>
@@ -1568,7 +1673,7 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
                     <td style={{ padding: '0.5rem 0.625rem', color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
                       {pkt.length} B
                     </td>
-                    <td style={{ padding: '0.5rem 0.625rem', color: '#334155', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pkt.info}>
+                    <td style={{ padding: '0.5rem 0.625rem', color: 'var(--text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pkt.info}>
                       {pkt.info}
                     </td>
                   </tr>
@@ -1588,7 +1693,7 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Binary style={{ width: 14, height: 14, color: '#2563EB' }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
                     Packet #{ep.number} Forensic Detail
                   </span>
                 </div>
@@ -1602,12 +1707,12 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: 11 }}>
                 <div>
                   <span style={{ color: '#64748B', fontWeight: 600 }}>IP Flow: </span>
-                  <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{ep.src_ip} → {ep.dst_ip}</span>
+                  <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{ep.src_ip} → {ep.dst_ip}</span>
                 </div>
                 {det.src_port && (
                   <div>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>Ports: </span>
-                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.src_port} → {det.dst_port}</span>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{det.src_port} → {det.dst_port}</span>
                   </div>
                 )}
                 {det.esp_spi && (
@@ -1619,7 +1724,7 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
                 {det.esp_seq && (
                   <div>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>ESP Sequence #: </span>
-                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.esp_seq}</span>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{det.esp_seq}</span>
                   </div>
                 )}
                 {det.ike_exchange && (
@@ -1631,13 +1736,13 @@ function PacketForensicsTable({ packets = [], totalCount = 0, selectedPacketNumb
                 {det.ike_msg_id && (
                   <div>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>Message ID: </span>
-                    <span style={{ fontFamily: 'monospace', color: '#0F172A' }}>{det.ike_msg_id}</span>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{det.ike_msg_id}</span>
                   </div>
                 )}
                 {det.layers && det.layers.length > 0 && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>Protocol Layer Stack: </span>
-                    <span style={{ color: '#0F172A', fontWeight: 600 }}>{det.layers.join(' ➔ ')}</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{det.layers.join(' ➔ ')}</span>
                   </div>
                 )}
               </div>
@@ -1655,7 +1760,7 @@ function SectionHead({ icon: Icon, title, action }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Icon style={{ width: 15, height: 15, color: '#2563EB' }} />
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</span>
       </div>
       {action}
     </div>
@@ -1719,7 +1824,7 @@ export default function AnalysisDetail() {
             style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8, padding: 0 }}>
             <ArrowLeft style={{ width: 13, height: 13 }} /> Back
           </button>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>Analysis Report</h1>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Analysis Report</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#94A3B8' }}>
             <span style={{ fontFamily: 'monospace', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={filename}>
               {filename}
@@ -1894,26 +1999,8 @@ export default function AnalysisDetail() {
         </div>
       </div>
 
-      {/* ── FORENSICS TIMELINE & PACKET EVIDENCE ───────────────────────── */}
+      {/* ── PACKET EVIDENCE ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Network Forensics Timeline */}
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <SectionHead
-            icon={Clock}
-            title="Network Forensics Timeline"
-            action={<span style={{ fontSize: 12, color: '#94A3B8' }}>Chronological Event Sequence</span>}
-          />
-          <NetworkForensicsTimeline
-            events={m?.forensics_timeline}
-            totalCount={m?.packet_count}
-            onInspectPacket={(pktNum) => {
-              setSelectedPacketNumber(pktNum);
-              const el = document.getElementById('packet-forensics-section');
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
-        </div>
-
         {/* Packet-Level Evidence (Forensics Dissection Table) */}
         <div id="packet-forensics-section" className="card" style={{ padding: '1.25rem' }}>
           <SectionHead icon={Binary} title="Packet-Level Evidence & Dissection Forensics" />

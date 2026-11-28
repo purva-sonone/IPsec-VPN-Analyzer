@@ -12,6 +12,7 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     HRFlowable, PageBreak
 )
+from reportlab.graphics.shapes import Drawing, Line, Rect, String, Polygon
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 # ── Color palette ─────────────────────────────────────────────────────────────
@@ -246,6 +247,125 @@ def _build_rule_audit_table(rules_evaluated: list, rules_skipped: list):
     t.setStyle(table_style)
     t._table_style = table_style
     return t
+
+
+def _build_ike_handshake_flow(m: dict, S: dict) -> list:
+    """
+    Build the IKE Handshake Flow Diagram flowables from actually observed
+    IKE/ISAKMP packets in `m["packets"]`. Never fabricates missing stages
+    or claims handshake success/failure without supporting evidence.
+    """
+    flowables = [Paragraph("IKE Handshake Flow Diagram", S["h2"])]
+
+    packets = m.get("packets") if isinstance(m.get("packets"), list) else []
+    ike_pkts = [
+        p for p in packets
+        if isinstance(p, dict) and str(p.get("protocol", "")).upper() in ("IKE", "ISAKMP")
+    ]
+
+    if not ike_pkts:
+        flowables.append(Paragraph(
+            "No IKE/ISAKMP handshake packets were observed in this capture "
+            "(Unavailable / Partial Capture). Handshake flow cannot be determined.",
+            S["small"],
+        ))
+        flowables.append(Spacer(1, 0.3 * cm))
+        return flowables
+
+    ike_ver = m.get("ike_version") or "Unknown"
+    observed = []
+    for p in ike_pkts:
+        det = p.get("details") if isinstance(p.get("details"), dict) else {}
+        exch = det.get("ike_exchange") or "Unknown Exchange"
+        is_resp = det.get("ike_is_response")
+        if is_resp is False:
+            role = "Request"
+        elif is_resp is True:
+            role = "Response"
+        else:
+            role = "Unknown"
+        pkt_no = p.get("number") or p.get("packet_no") or "?"
+        ts = p.get("timestamp") or "—"
+        src = p.get("src_ip") or p.get("src") or "?"
+        dst = p.get("dst_ip") or p.get("dst") or "?"
+        observed.append({
+            "exchange": exch,
+            "role": role,
+            "pkt_no": pkt_no,
+            "ts": ts,
+            "src": src,
+            "dst": dst,
+        })
+
+    # Determine missing expected stages without fabricating them
+    missing_stages = []
+    if ike_ver == "IKEv2":
+        for req_exch in ("IKE_SA_INIT", "IKE_AUTH"):
+            for req_role in ("Request", "Response"):
+                if not any(o["exchange"] == req_exch and o["role"] == req_role for o in observed):
+                    missing_stages.append(f"{req_exch} {req_role}")
+    elif ike_ver == "IKEv1":
+        has_phase1 = any(
+            o["exchange"] in ("Identity Protection (Main Mode)", "Aggressive Mode")
+            for o in observed
+        )
+        if not has_phase1:
+            missing_stages.append("Phase 1 (Main Mode / Aggressive Mode)")
+        if not any(o["exchange"] == "Quick Mode" for o in observed):
+            missing_stages.append("Phase 2 (Quick Mode)")
+
+    capture_status = "Partial Capture" if missing_stages else "Observed Exchanges Complete"
+    flowables.append(Paragraph(
+        f"<b>Detected Protocol:</b> {ike_ver} &nbsp;|&nbsp; "
+        f"<b>Observed IKE Packets:</b> {len(observed)} &nbsp;|&nbsp; "
+        f"<b>Capture Status:</b> {capture_status}",
+        S["small"],
+    ))
+    flowables.append(Spacer(1, 0.2 * cm))
+
+    # Draw sequence diagram (cap at 12 rows to keep PDF clean)
+    shown = observed[:12]
+    width = 17.0 * cm
+    row_h = 26
+    top_pad = 30
+    bot_pad = 14
+    height = top_pad + len(shown) * row_h + bot_pad
+
+    d = Drawing(width, height)
+    x_init = 2.6 * cm
+    x_resp = width - 2.6 * cm
+
+    # Actor headers
+    for x, label in ((x_init, "Initiator"), (x_resp, "Responder")):
+        d.add(Rect(x - 1.5 * cm, height - 22, 3.0 * cm, 18, rx=3, ry=3, fillColor=NAVY, strokeColor=NAVY))
+        d.add(String(x, height - 16, label, fontName="Helvetica-Bold", fontSize=8.5, fillColor=WHITE, textAnchor="middle"))
+        d.add(Line(x, bot_pad, x, height - 24, strokeColor=SLATE300, strokeWidth=1, strokeDashArray=[3, 2]))
+
+    for idx, item in enumerate(shown):
+        y = height - top_pad - idx * row_h - 10
+        label = f"Pkt #{item['pkt_no']} ({item['ts']}) | {item['exchange']} [{item['role']}]"
+        if item["role"] == "Request":
+            d.add(Line(x_init, y, x_resp - 6, y, strokeColor=INDIGO, strokeWidth=1.4))
+            d.add(Polygon([x_resp, y, x_resp - 6, y + 3, x_resp - 6, y - 3], fillColor=INDIGO, strokeColor=INDIGO))
+        elif item["role"] == "Response":
+            d.add(Line(x_resp, y, x_init + 6, y, strokeColor=GREEN, strokeWidth=1.4))
+            d.add(Polygon([x_init, y, x_init + 6, y + 3, x_init + 6, y - 3], fillColor=GREEN, strokeColor=GREEN))
+        else:
+            d.add(Line(x_init, y, x_resp, y, strokeColor=AMBER, strokeWidth=1.2, strokeDashArray=[4, 2]))
+        d.add(String((x_init + x_resp) / 2, y + 5, label, fontName="Helvetica", fontSize=7.5, fillColor=SLATE700, textAnchor="middle"))
+
+    flowables.append(d)
+    if len(observed) > 12:
+        flowables.append(Paragraph(f"Showing first 12 of {len(observed)} observed IKE packets.", S["small"]))
+
+    if missing_stages:
+        flowables.append(Spacer(1, 0.15 * cm))
+        flowables.append(Paragraph(
+            f"<b>Not Observed / Unavailable Stages ({capture_status}):</b> " + ", ".join(missing_stages),
+            S["small"],
+        ))
+    flowables.append(Spacer(1, 0.3 * cm))
+    return flowables
 
 
 def generate_pdf(report: dict) -> bytes:

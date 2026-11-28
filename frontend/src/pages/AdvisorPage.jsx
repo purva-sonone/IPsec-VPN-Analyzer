@@ -54,6 +54,7 @@ function MarkdownBlock({ content }) {
   const lines = String(content || '').split('\n');
   const elements = [];
   let listItems = [];
+  let tableRows = [];
 
   const flushList = (keyPrefix) => {
     if (listItems.length > 0) {
@@ -68,13 +69,62 @@ function MarkdownBlock({ content }) {
     }
   };
 
+  const flushTable = (keyPrefix) => {
+    if (tableRows.length === 0) return;
+    const parseRow = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+    const isSep = (r) => /^\|?[\s:-]+(\|[\s:-]+)+\|?$/.test(r);
+    const nonSep = tableRows.filter((r) => !isSep(r));
+    if (nonSep.length > 0) {
+      const header = parseRow(nonSep[0]);
+      const body = nonSep.slice(1).map(parseRow);
+      elements.push(
+        <div key={`${keyPrefix}-tbl`} style={{ overflowX: 'auto', margin: '0.5rem 0' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, border: '1px solid var(--border)', borderRadius: 6 }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--bg-muted, rgba(148,163,184,0.12))' }}>
+                {header.map((cell, cIdx) => (
+                  <th key={cIdx} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {renderInline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row, rIdx) => (
+                <tr key={rIdx} style={{ borderBottom: '1px solid var(--border)' }}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} style={{ padding: '6px 10px', borderRight: '1px solid var(--border)', color: 'var(--text-primary)', verticalAlign: 'top', lineHeight: 1.45 }}>
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    tableRows = [];
+  };
+
   lines.forEach((rawLine, idx) => {
     const line = rawLine.trim();
     if (!line) {
       flushList(idx);
+      flushTable(idx);
       return;
     }
-    if (line.startsWith('### ')) {
+    if (line.startsWith('|') && line.includes('|', 1)) {
+      flushList(idx);
+      tableRows.push(line);
+      return;
+    }
+    flushTable(idx);
+
+    if (/^(-{3,}|\*{3,})$/.test(line)) {
+      flushList(idx);
+      elements.push(<hr key={idx} style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0.6rem 0' }} />);
+    } else if (line.startsWith('### ')) {
       flushList(idx);
       elements.push(
         <h4 key={idx} style={{ margin: '0.5rem 0 0.25rem', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -101,6 +151,7 @@ function MarkdownBlock({ content }) {
     }
   });
   flushList('end');
+  flushTable('end');
 
   return <div>{elements}</div>;
 }
