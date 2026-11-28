@@ -435,32 +435,42 @@ def ensure_user_analyses_indexed(
     Ensure either the selected analysis (owned by user_id) or all analyses owned
     by user_id are indexed in ChromaDB.
     Raises PermissionError if analysis_id is specified but not owned/found for user_id.
+
+    Optimization: batch-fetch already-indexed IDs in ONE ChromaDB call, then only
+    load full reports for analyses that are genuinely missing from the store.
     """
     col = collection if collection is not None else get_chroma_collection(
         collection_name=(HASH_COLLECTION_NAME if _use_hash_fallback() else COLLECTION_NAME)
     )
-    indexed_ids: list[str] = []
 
     if analysis_id:
         report = get_analysis_by_id(analysis_id, user_id=user_id)
         if report is None:
             raise PermissionError("Analysis not found or access denied.")
         index_analysis_if_needed(report, user_id=user_id, collection=col, embed_fn=embed_fn)
-        indexed_ids.append(str(analysis_id))
-        return indexed_ids
+        return [str(analysis_id)]
 
     analyses = get_all_analyses(user_id=user_id)
-    for row in analyses:
-        aid = str(row.get("id") or "")
-        if not aid:
-            continue
-        # Fast check before loading full_result
-        existing = col.get(
-            where={"$and": [{"user_id": int(user_id)}, {"analysis_id": aid}]},
-            limit=1,
-            include=[],
-        )
-        if existing.get("ids"):
+    all_aids = [str(row.get("id") or "") for row in analyses if row.get("id")]
+    if not all_aids:
+        return []
+
+    # --- ONE batch call to find which analysis_ids already have chunks ---
+    existing_all = col.get(
+        where={"user_id": int(user_id)},
+        include=["metadatas"],
+    )
+    existing_metas = existing_all.get("metadatas") or []
+    already_indexed: set[str] = {
+        str(m.get("analysis_id", ""))
+        for m in existing_metas
+        if isinstance(m, dict) and m.get("analysis_id")
+    }
+    # ----------------------------------------------------------------------
+
+    indexed_ids: list[str] = []
+    for aid in all_aids:
+        if aid in already_indexed:
             indexed_ids.append(aid)
             continue
         report = get_analysis_by_id(aid, user_id=user_id)
