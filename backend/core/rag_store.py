@@ -40,6 +40,8 @@ HASH_COLLECTION_NAME = "ipsec_analysis_rag_hash_v1"
 
 _chroma_client: Optional[chromadb.PersistentClient] = None
 _hash_vectorizer = None
+_ollama_reachable_cache: dict = {"result": None, "ts": 0.0}
+_OLLAMA_CACHE_TTL = 30.0  # re-check every 30 seconds max
 
 
 class OllamaEmbeddingError(RuntimeError):
@@ -66,16 +68,24 @@ def _hash_embed_texts(texts: list[str], n_features: int = 384) -> list[list[floa
 
 
 def is_ollama_reachable(base_url: str | None = None, timeout: float = 0.8) -> bool:
-    """Fast check to see if local Ollama is reachable (skipped in production)."""
+    """Fast check to see if local Ollama is reachable. Result cached for 30s."""
+    import time
+    global _ollama_reachable_cache
     if os.environ.get("PYTHON_ENV", "").strip().lower() == "production":
         return False
+    now = time.monotonic()
+    if _ollama_reachable_cache["result"] is not None and (now - _ollama_reachable_cache["ts"]) < _OLLAMA_CACHE_TTL:
+        return _ollama_reachable_cache["result"]
     url = (base_url or OLLAMA_BASE_URL).rstrip("/")
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.get(f"{url}/api/tags")
-            return resp.status_code == 200
+            result = resp.status_code == 200
     except Exception:
-        return False
+        result = False
+    _ollama_reachable_cache["result"] = result
+    _ollama_reachable_cache["ts"] = now
+    return result
 
 
 def _use_hash_fallback() -> bool:
