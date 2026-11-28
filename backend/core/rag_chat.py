@@ -60,7 +60,7 @@ _load_local_dotenv()
 # ---------------------------------------------------------------------------
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_CHAT_MODEL = os.environ.get("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
+GROQ_CHAT_MODEL = os.environ.get("GROQ_CHAT_MODEL", "openai/gpt-oss-20b")
 
 OLLAMA_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.2:1b")
 
@@ -314,7 +314,7 @@ def call_groq_chat(messages: list[dict], model: str | None = None) -> str:
         "model": chat_model,
         "messages": messages,
         "temperature": 0.2,
-        "max_tokens": 1024,
+        "max_tokens": 2048,
     }
     try:
         with httpx.Client(timeout=30.0) as client:
