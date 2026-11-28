@@ -214,7 +214,8 @@ export default function AdvisorPage() {
   };
 
   const sendMessage = async (textOverride) => {
-    const q = (textOverride ?? input).trim();
+    const rawQ = (textOverride ?? input).trim();
+    const q = rawQ || (attachment?.ok ? 'Summarize and analyze the IPsec details in this uploaded document.' : '');
     if (!q || sending) return;
 
     setError(null);
@@ -278,7 +279,10 @@ export default function AdvisorPage() {
     }
   };
 
-  const modelReady = status?.ollama_connected && status?.chat_model_available && status?.embed_model_available;
+  const isGroq = status?.backend === 'groq';
+  const modelReady = isGroq
+    ? Boolean(status?.chat_model_available && status?.embed_model_available)
+    : Boolean(status?.ollama_connected && status?.chat_model_available && status?.embed_model_available);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 960, margin: '0 auto' }}>
@@ -324,8 +328,10 @@ export default function AdvisorPage() {
               {status === null
                 ? 'Checking model…'
                 : modelReady
-                  ? `Ollama Connected (${status.chat_model})`
-                  : status.detail || 'Ollama Disconnected'}
+                  ? isGroq
+                    ? `Groq Connected (${status.chat_model})`
+                    : `Ollama Connected (${status.chat_model})`
+                  : status.detail || 'Model Disconnected'}
             </div>
             <button
               type="button"

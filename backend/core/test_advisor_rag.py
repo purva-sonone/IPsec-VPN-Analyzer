@@ -648,5 +648,41 @@ class TestPdfDocumentProcessor(unittest.TestCase):
             tmpdir.cleanup()
 
 
+class TestGroqDualBackend(unittest.TestCase):
+    """Tests for Groq Cloud backend + Ollama fallback + hash embedding fallback."""
+
+    def test_status_selects_groq_when_api_key_set(self):
+        with patch.dict(os.environ, {"GROQ_API_KEY": "gsk_test_123", "PYTHON_ENV": "production"}, clear=False):
+            st = rag_chat.check_advisor_status()
+        self.assertEqual(st["backend"], "groq")
+        self.assertTrue(st["groq_connected"])
+        self.assertTrue(st["chat_model_available"])
+        self.assertTrue(st["embed_model_available"])
+        self.assertEqual(st["embed_model"], "local-hash-v1")
+
+    def test_call_groq_chat_uses_openai_compatible_endpoint(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Groq response for AES-GCM-16."}}]
+        }
+        mock_resp.raise_for_status.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "gsk_test_123"}, clear=False), \
+             patch("core.rag_chat.httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value.post.return_value = mock_resp
+            ans = rag_chat.call_groq_chat([{"role": "user", "content": "Explain encryption"}])
+
+        self.assertEqual(ans, "Groq response for AES-GCM-16.")
+        call_args = mock_client.return_value.__enter__.return_value.post.call_args
+        self.assertIn("/chat/completions", call_args[0][0])
+        self.assertEqual(call_args[1]["headers"]["Authorization"], "Bearer gsk_test_123")
+
+    def test_hash_embed_fallback_in_production_groq_mode(self):
+        with patch.dict(os.environ, {"GROQ_API_KEY": "gsk_test_123", "PYTHON_ENV": "production"}, clear=False):
+            vecs = rag_store.embed_texts(["IKEv2 AES-GCM-16", "Diffie-Hellman Group 19"])
+        self.assertEqual(len(vecs), 2)
+        self.assertEqual(len(vecs[0]), 384)
+
+
 if __name__ == "__main__":
     unittest.main()

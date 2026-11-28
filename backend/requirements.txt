@@ -15,7 +15,3 @@ httpx
 pytesseract
 Pillow
 pymupdf
-
-httpx
-pytesseract
-Pillow

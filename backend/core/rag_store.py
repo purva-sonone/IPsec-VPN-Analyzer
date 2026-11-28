@@ -36,32 +36,87 @@ CHROMA_PERSIST_DIR = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "chroma_db"),
 )
 COLLECTION_NAME = "ipsec_analysis_rag_v1"
+HASH_COLLECTION_NAME = "ipsec_analysis_rag_hash_v1"
 
 _chroma_client: Optional[chromadb.PersistentClient] = None
+_hash_vectorizer = None
 
 
 class OllamaEmbeddingError(RuntimeError):
     """Raised when Ollama embedding generation fails or Ollama is unreachable."""
 
 
-def get_chroma_collection(persist_dir: str | None = None):
+def _hash_embed_texts(texts: list[str], n_features: int = 384) -> list[list[float]]:
+    """Zero-dependency local L2-normalized hashing embeddings via scikit-learn."""
+    if not texts:
+        return []
+    global _hash_vectorizer
+    if _hash_vectorizer is None:
+        from sklearn.feature_extraction.text import HashingVectorizer
+
+        _hash_vectorizer = HashingVectorizer(
+            n_features=n_features,
+            ngram_range=(1, 2),
+            norm="l2",
+            alternate_sign=True,
+            lowercase=True,
+        )
+    matrix = _hash_vectorizer.transform(texts)
+    return matrix.toarray().tolist()
+
+
+def is_ollama_reachable(base_url: str | None = None, timeout: float = 0.8) -> bool:
+    """Fast check to see if local Ollama is reachable (skipped in production)."""
+    if os.environ.get("PYTHON_ENV", "").strip().lower() == "production":
+        return False
+    url = (base_url or OLLAMA_BASE_URL).rstrip("/")
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(f"{url}/api/tags")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def _use_hash_fallback() -> bool:
+    """
+    Use local scikit-learn hashing embeddings when:
+    - EMBED_BACKEND=hash, OR
+    - GROQ_API_KEY is set and Ollama is not reachable (e.g. Render cloud).
+    """
+    if os.environ.get("EMBED_BACKEND", "").strip().lower() == "hash":
+        return True
+    if os.environ.get("GROQ_API_KEY", "").strip():
+        return not is_ollama_reachable()
+    return False
+
+
+def get_chroma_collection(persist_dir: str | None = None, collection_name: str | None = None):
     """Return (and lazily initialize) the persistent ChromaDB collection."""
     global _chroma_client
     target_dir = persist_dir or CHROMA_PERSIST_DIR
+    target_name = collection_name or COLLECTION_NAME
     if persist_dir is not None:
         client = chromadb.PersistentClient(path=target_dir)
-        return client.get_or_create_collection(name=COLLECTION_NAME)
+        return client.get_or_create_collection(name=target_name)
 
     if _chroma_client is None:
         os.makedirs(target_dir, exist_ok=True)
         _chroma_client = chromadb.PersistentClient(path=target_dir)
-    return _chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+    return _chroma_client.get_or_create_collection(name=target_name)
 
 
 def embed_texts(texts: list[str], base_url: str | None = None, model: str | None = None) -> list[list[float]]:
-    """Generate vector embeddings using Ollama's local /api/embed endpoint."""
+    """
+    Generate vector embeddings.
+    Uses local Ollama /api/embed by default, or falls back to local scikit-learn
+    hashing embeddings when EMBED_BACKEND=hash or Groq mode is active without Ollama.
+    """
     if not texts:
         return []
+    if _use_hash_fallback():
+        return _hash_embed_texts(texts)
+
     url = (base_url or OLLAMA_BASE_URL).rstrip("/")
     embed_model = model or OLLAMA_EMBED_MODEL
 
@@ -321,7 +376,9 @@ def index_analysis_if_needed(
     if not analysis_id:
         return 0
 
-    col = collection if collection is not None else get_chroma_collection()
+    col = collection if collection is not None else get_chroma_collection(
+        collection_name=(HASH_COLLECTION_NAME if _use_hash_fallback() else COLLECTION_NAME)
+    )
     content_hash = _compute_report_hash(report)
 
     existing = col.get(
@@ -367,7 +424,9 @@ def ensure_user_analyses_indexed(
     by user_id are indexed in ChromaDB.
     Raises PermissionError if analysis_id is specified but not owned/found for user_id.
     """
-    col = collection if collection is not None else get_chroma_collection()
+    col = collection if collection is not None else get_chroma_collection(
+        collection_name=(HASH_COLLECTION_NAME if _use_hash_fallback() else COLLECTION_NAME)
+    )
     indexed_ids: list[str] = []
 
     if analysis_id:
@@ -412,7 +471,9 @@ def retrieve_relevant_chunks(
     Retrieve top-k relevant chunks strictly scoped to `user_id`
     (and `analysis_id` when provided).
     """
-    col = collection if collection is not None else get_chroma_collection()
+    col = collection if collection is not None else get_chroma_collection(
+        collection_name=(HASH_COLLECTION_NAME if _use_hash_fallback() else COLLECTION_NAME)
+    )
     where_filter: dict = (
         {"$and": [{"user_id": int(user_id)}, {"analysis_id": str(analysis_id)}]}
         if analysis_id

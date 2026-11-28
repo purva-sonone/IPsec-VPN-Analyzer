@@ -2,8 +2,9 @@
 rag_chat.py – Conversational RAG engine and per-user chat history
 for the IPsec VPN Analyzer Security Assistant.
 
-Uses local Ollama (llama3.2:1b by default) with strict grounding rules
-and SQLite-persisted conversation history scoped by `user_id`.
+Supports two chat backends (auto-selected by environment):
+  1. Groq Cloud API  — fast inference (set GROQ_API_KEY)
+  2. Local Ollama    — fallback when GROQ_API_KEY is absent
 """
 
 from __future__ import annotations
@@ -22,12 +23,71 @@ from core.rag_store import (
     OLLAMA_EMBED_MODEL,
     OllamaEmbeddingError,
     ensure_user_analyses_indexed,
+    is_ollama_reachable,
     retrieve_relevant_chunks,
 )
 
 logger = logging.getLogger(__name__)
 
+
+def _load_local_dotenv() -> None:
+    """Load key=value pairs from .env (backend/.env or repo .env) if not already in os.environ."""
+    core_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.dirname(core_dir)
+    repo_dir = os.path.dirname(backend_dir)
+    for env_path in (os.path.join(backend_dir, ".env"), os.path.join(repo_dir, ".env")):
+        if not os.path.isfile(env_path):
+            continue
+        try:
+            with open(env_path, "r", encoding="utf-8") as fh:
+                for raw_line in fh:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+        except OSError as exc:
+            logger.debug("Could not read %s: %s", env_path, exc)
+
+
+_load_local_dotenv()
+
+# ---------------------------------------------------------------------------
+# Backend configuration — Groq if GROQ_API_KEY is set, otherwise Ollama
+# ---------------------------------------------------------------------------
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_CHAT_MODEL = os.environ.get("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
+
 OLLAMA_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "llama3.2:1b")
+
+
+def _get_groq_api_key() -> str:
+    return (os.environ.get("GROQ_API_KEY") or GROQ_API_KEY or "").strip()
+
+
+def _get_groq_chat_model() -> str:
+    return (os.environ.get("GROQ_CHAT_MODEL") or GROQ_CHAT_MODEL).strip()
+
+
+def _get_ollama_chat_model() -> str:
+    return (os.environ.get("OLLAMA_CHAT_MODEL") or OLLAMA_CHAT_MODEL).strip()
+
+
+def _use_groq() -> bool:
+    return bool(_get_groq_api_key())
+
+
+def _active_backend() -> str:
+    return "groq" if _use_groq() else "ollama"
+
+
+def _active_chat_model() -> str:
+    return _get_groq_chat_model() if _use_groq() else _get_ollama_chat_model()
+
 
 SYSTEM_PROMPT = """You are the IPsec Security Assistant for the IPsec VPN Protocol Analyzer.
 You must answer strictly based on the retrieved PCAP analysis evidence provided below and general IPsec/cryptographic knowledge.
@@ -51,6 +111,10 @@ MANDATORY RULES:
 
 class OllamaChatError(RuntimeError):
     """Raised when Ollama chat generation fails or Ollama is unreachable."""
+
+
+class GroqChatError(RuntimeError):
+    """Raised when Groq API call fails."""
 
 
 def _scope_key(analysis_id: str | None) -> str:
@@ -161,9 +225,14 @@ def clear_chat_history(user_id: int, analysis_id: str | None = None) -> int:
         return int(cursor.rowcount)
 
 
+# ---------------------------------------------------------------------------
+# Status helpers
+# ---------------------------------------------------------------------------
+
 def check_ollama_status(base_url: str | None = None) -> dict:
     """Check whether local Ollama is reachable and whether required models are installed."""
     url = (base_url or OLLAMA_BASE_URL).rstrip("/")
+    chat_model = _get_ollama_chat_model()
     try:
         with httpx.Client(timeout=3.0) as client:
             resp = client.get(f"{url}/api/tags")
@@ -175,30 +244,140 @@ def check_ollama_status(base_url: str | None = None) -> dict:
             t = target.lower()
             return any(m.lower() == t or m.lower().startswith(f"{t}:") for m in models)
 
-        chat_ok = _has_model(OLLAMA_CHAT_MODEL)
+        chat_ok = _has_model(chat_model)
         embed_ok = _has_model(OLLAMA_EMBED_MODEL)
         return {
+            "backend": "ollama",
             "ollama_connected": True,
-            "chat_model": OLLAMA_CHAT_MODEL,
+            "groq_connected": False,
+            "chat_model": chat_model,
             "embed_model": OLLAMA_EMBED_MODEL,
             "chat_model_available": chat_ok,
             "embed_model_available": embed_ok,
             "detail": (
                 "Ready"
                 if (chat_ok and embed_ok)
-                else f"Connected, missing model(s): {', '.join([m for m, ok in [(OLLAMA_CHAT_MODEL, chat_ok), (OLLAMA_EMBED_MODEL, embed_ok)] if not ok])}"
+                else f"Connected, missing model(s): {', '.join([m for m, ok in [(chat_model, chat_ok), (OLLAMA_EMBED_MODEL, embed_ok)] if not ok])}"
             ),
         }
     except Exception as exc:
         return {
+            "backend": "ollama",
             "ollama_connected": False,
-            "chat_model": OLLAMA_CHAT_MODEL,
+            "groq_connected": False,
+            "chat_model": chat_model,
             "embed_model": OLLAMA_EMBED_MODEL,
             "chat_model_available": False,
             "embed_model_available": False,
             "detail": f"Ollama unreachable ({exc})",
         }
 
+
+def check_advisor_status() -> dict:
+    """
+    Return unified status for the advisor.
+    - If GROQ_API_KEY is set  -> report Groq backend (with Ollama/hash embedding info).
+    - Otherwise               -> check local Ollama.
+    """
+    if _use_groq():
+        groq_model = _get_groq_chat_model()
+        ollama_up = is_ollama_reachable()
+        return {
+            "backend": "groq",
+            "ollama_connected": ollama_up,
+            "groq_connected": True,
+            "chat_model": groq_model,
+            "embed_model": OLLAMA_EMBED_MODEL if ollama_up else "local-hash-v1",
+            "chat_model_available": True,
+            "embed_model_available": True,
+            "detail": f"Groq Cloud ({groq_model}) — fast inference enabled",
+            "groq_model": groq_model,
+        }
+    return check_ollama_status()
+
+
+# ---------------------------------------------------------------------------
+# Chat backends
+# ---------------------------------------------------------------------------
+
+def call_groq_chat(messages: list[dict], model: str | None = None) -> str:
+    """Send a chat completion request to Groq Cloud API (OpenAI-compatible)."""
+    api_key = _get_groq_api_key()
+    if not api_key:
+        raise GroqChatError("GROQ_API_KEY is not set.")
+    chat_model = model or _get_groq_chat_model()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": chat_model,
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": 1024,
+    }
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(f"{GROQ_BASE_URL}/chat/completions", headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+            if not content:
+                raise GroqChatError("Groq returned an empty response.")
+            return content.strip()
+    except httpx.HTTPStatusError as exc:
+        err_body = ""
+        try:
+            err_body = exc.response.json().get("error", {}).get("message", "")
+        except Exception:
+            pass
+        detail_suffix = f" — {err_body}" if err_body else ""
+        raise GroqChatError(f"Groq API error ({chat_model}): {exc}{detail_suffix}") from exc
+    except httpx.HTTPError as exc:
+        raise GroqChatError(f"Unable to reach Groq API: {exc}") from exc
+
+
+def call_ollama_chat(
+    messages: list[dict],
+    base_url: str | None = None,
+    model: str | None = None,
+) -> str:
+    """Send a chat completion request to local Ollama /api/chat."""
+    url = (base_url or OLLAMA_BASE_URL).rstrip("/")
+    chat_model = model or _get_ollama_chat_model()
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(
+                f"{url}/api/chat",
+                json={
+                    "model": chat_model,
+                    "messages": messages,
+                    "stream": False,
+                    "options": {"temperature": 0.2},
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            content = (data.get("message") or {}).get("content")
+            if not content:
+                raise OllamaChatError("Ollama returned an empty response.")
+            return content.strip()
+    except httpx.HTTPError as exc:
+        raise OllamaChatError(
+            f"Unable to generate response via Ollama ({chat_model}): {exc}"
+        ) from exc
+
+
+def _call_active_chat(messages: list[dict]) -> str:
+    """Route to Groq or Ollama depending on GROQ_API_KEY presence."""
+    if _use_groq():
+        return call_groq_chat(messages)
+    return call_ollama_chat(messages)
+
+
+# ---------------------------------------------------------------------------
+# Reference extraction
+# ---------------------------------------------------------------------------
 
 def _extract_references(chunks: list[dict]) -> list[dict]:
     """Build deduplicated, clickable reference metadata from retrieved chunks."""
@@ -230,36 +409,9 @@ def _extract_references(chunks: list[dict]) -> list[dict]:
     return list(by_analysis.values())
 
 
-def call_ollama_chat(
-    messages: list[dict],
-    base_url: str | None = None,
-    model: str | None = None,
-) -> str:
-    """Send a chat completion request to local Ollama /api/chat."""
-    url = (base_url or OLLAMA_BASE_URL).rstrip("/")
-    chat_model = model or OLLAMA_CHAT_MODEL
-    try:
-        with httpx.Client(timeout=90.0) as client:
-            resp = client.post(
-                f"{url}/api/chat",
-                json={
-                    "model": chat_model,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"temperature": 0.2},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = (data.get("message") or {}).get("content")
-            if not content:
-                raise OllamaChatError("Ollama returned an empty response.")
-            return content.strip()
-    except httpx.HTTPError as exc:
-        raise OllamaChatError(
-            f"Unable to generate response via Ollama ({chat_model}): {exc}"
-        ) from exc
-
+# ---------------------------------------------------------------------------
+# Main RAG pipeline
+# ---------------------------------------------------------------------------
 
 def generate_rag_answer(
     user_id: int,
@@ -276,7 +428,7 @@ def generate_rag_answer(
     2. Retrieve relevant evidence chunks strictly filtered by user_id (+ analysis_id).
     3. Include recent conversation turns for follow-up questions.
     4. Attach untrusted OCR/document source context if provided.
-    5. Generate grounded response with Ollama (llama3.2:1b).
+    5. Generate grounded response with Groq (fast) or Ollama (local fallback).
     6. Persist user & assistant messages in SQLite for `user_id`.
     """
     clean_msg = (message or "").strip()
@@ -342,11 +494,13 @@ def generate_rag_answer(
             llm_messages.append({"role": turn["role"], "content": turn["content"]})
     llm_messages.append({"role": "user", "content": stored_user_msg})
 
-    # 5. Generate answer
-    generator = chat_fn or call_ollama_chat
+    # 5. Generate answer — Groq (fast) or Ollama (local)
+    active_model = _active_chat_model()
+    active_backend = _active_backend()
+    generator = chat_fn or _call_active_chat
     answer = generator(llm_messages)
 
-    # 6. Persist conversation turns (preserve attachment text in user turn for follow-ups)
+    # 6. Persist conversation turns
     persisted_user_content = (
         f"{stored_user_msg}\n\n[Extracted OCR Text ({os.path.basename(str(attachment_context.get('filename') or 'image'))})]:\n"
         f"{str(attachment_context.get('extracted_text') or '').strip()[:2000]}"
@@ -360,13 +514,14 @@ def generate_rag_answer(
         role="assistant",
         content=answer,
         references=references,
-        model=OLLAMA_CHAT_MODEL,
+        model=active_model,
     )
 
     return {
         "message_id": msg_id,
         "answer": answer,
         "references": references,
-        "model": OLLAMA_CHAT_MODEL,
+        "model": active_model,
+        "backend": active_backend,
         "analysis_id": analysis_id,
     }

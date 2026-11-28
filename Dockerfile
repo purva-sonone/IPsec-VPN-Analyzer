@@ -4,11 +4,13 @@ FROM python:3.11-slim
 # Prevent interactive prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install TShark (required by PyShark for PCAP parsing)
+# Install TShark (required by PyShark) and Tesseract OCR (required for image/scanned PDF uploads)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tshark \
         libpcap-dev \
+        tesseract-ocr \
+        tesseract-ocr-eng \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

@@ -12,8 +12,9 @@ from pydantic import BaseModel
 
 from api.auth_routes import require_auth
 from core.rag_chat import (
+    GroqChatError,
     OllamaChatError,
-    check_ollama_status,
+    check_advisor_status,
     clear_chat_history,
     generate_rag_answer,
     get_chat_history,
@@ -31,8 +32,8 @@ class ChatRequest(BaseModel):
 
 @advisor_router.get("/status")
 def advisor_status(user: dict = Depends(require_auth)):
-    """Return local Ollama connection and model availability status."""
-    return check_ollama_status()
+    """Return active AI backend (Groq or local Ollama) connection status."""
+    return check_advisor_status()
 
 
 @advisor_router.post("/chat")
@@ -53,7 +54,7 @@ def advisor_chat(body: ChatRequest, user: dict = Depends(require_auth)):
         raise HTTPException(status_code=400, detail=str(exc))
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except (OllamaEmbeddingError, OllamaChatError) as exc:
+    except (OllamaEmbeddingError, OllamaChatError, GroqChatError) as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Advisor chat failed: {exc}")
